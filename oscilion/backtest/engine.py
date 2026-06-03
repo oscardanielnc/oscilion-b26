@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from config import config
-from oscilion.analysis import candidate_from_df
+from oscilion.analysis import breakout_candidate, candidate_from_df
 from oscilion.backtest.costs import DEFAULT_COSTS, CostModel
 from oscilion.data import store
 from oscilion.signals.entry import confirm_turn
@@ -40,6 +40,7 @@ class BTParams:
     max_hold_bars: int = 72          # timeout de la posición
     allow_regimes: tuple[str, ...] = ("range", "trend")  # 'chaos' nunca
     require_confirmation: bool = False  # exigir confirmación de giro (Fase 5)
+    strategy: str = "reversion"         # reversion | momentum (probe)
     costs: CostModel = field(default_factory=lambda: DEFAULT_COSTS)
 
 
@@ -118,7 +119,10 @@ def backtest_symbol(sym: str, tf: str | None = None, p: BTParams | None = None) 
         # 3) si está plano, evaluar señal sobre la ventana hasta i (cierre)
         if pos is None and pending is None and i + 1 < n:
             window = df.iloc[i - p.warmup + 1: i + 1]
-            cand = candidate_from_df(sym, window, tf=tf, lookback=p.lookback)
+            if p.strategy == "momentum":
+                cand = breakout_candidate(sym, window, tf=tf, lookback=p.lookback)
+            else:
+                cand = candidate_from_df(sym, window, tf=tf, lookback=p.lookback)
             ok = (cand.get("tradeable") and cand.get("score", 0) >= p.min_score
                   and cand.get("regime") in p.allow_regimes)
             if ok and p.require_confirmation:
