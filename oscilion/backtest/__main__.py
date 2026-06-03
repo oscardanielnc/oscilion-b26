@@ -30,12 +30,13 @@ def main() -> None:
     ap.add_argument("--min-score", type=float, default=0.0)
     ap.add_argument("--regimes", default="range,trend")
     ap.add_argument("--max-hold", type=int, default=72)
+    ap.add_argument("--confirm", action="store_true", help="exigir confirmación de giro (F5)")
     ap.add_argument("--save", default="")
     args = ap.parse_args()
 
     syms = [s.strip() for s in args.symbols.split(",") if s.strip()] or config.symbols
     p = BTParams(capital=args.capital, min_score=args.min_score,
-                 max_hold_bars=args.max_hold,
+                 max_hold_bars=args.max_hold, require_confirmation=args.confirm,
                  allow_regimes=tuple(r.strip() for r in args.regimes.split(",") if r.strip()))
 
     result = run(syms, tf=args.tf, p=p)

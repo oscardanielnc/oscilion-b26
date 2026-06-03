@@ -156,6 +156,23 @@ def upsert_ohlcv_status(
         log.exception("Fallo al upsert ohlcv_status %s %s %s", sym, tf, source)
 
 
+def update_calibration(bucket_score: int, hit: bool) -> None:
+    """Acumula resultado real por bucket de score (forward-test, Fase 5)."""
+    try:
+        with _lock:
+            get_connection().execute(
+                "INSERT INTO calibration (bucket_score, n, hits, ratio_real, updated_at)"
+                " VALUES (?, 1, ?, ?, ?)"
+                " ON CONFLICT(bucket_score) DO UPDATE SET"
+                "  n = n + 1, hits = hits + excluded.hits,"
+                "  ratio_real = CAST(hits + excluded.hits AS REAL) / (n + 1),"
+                "  updated_at = excluded.updated_at",
+                (int(bucket_score), 1 if hit else 0, 1.0 if hit else 0.0, _now_ms()),
+            )
+    except Exception:
+        log.exception("Fallo update_calibration bucket=%s", bucket_score)
+
+
 def counts() -> dict[str, int]:
     """Conteo de filas por tabla (para /status del API y diagnósticos)."""
     out: dict[str, int] = {}

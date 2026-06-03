@@ -96,4 +96,15 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
   Reusa la MISMA señal del live (`candidate_from_df`). 🚦 Veredicto inicial
   (lógica naïve, ~120d 1h): **NO-GO** (sin confirmación de giro aún; mercado
   en tendencia). Falta validar con histórico multi-año + giro de Fase 5.
-- ⬜ Fase 5 — Motor en vivo (incl. confirmación de giro) — siguiente sesión.
+- ✅ Fase 5 — Motor en vivo: `signals/{entry,exit,maker_taker,state_machine,live}.py`
+  + `scoring/calibration.py`. Máquina de estados por moneda (ESPERANDO→
+  ACERCÁNDOSE→EN_TRADE) con **confirmación de giro**, gestión de salida
+  (stop/tp/break/trailing/parcial), maker vs taker, calibración forward y
+  alertas ENTRA/TOMA-GANANCIA/SAL. Integrado al orquestador (monitor en vivo,
+  sin operar); API `/state` y `/calibration`. La confirmación de giro también
+  es opcional en el backtest (`--confirm`).
+  🚦 **Hallazgo F5 (1h, ~120d):** la confirmación de giro da vuelta el edge —
+  SIN: winrate 28% PF 0.87 Sharpe −0.47 ret −41% · CON: winrate 40% PF 1.22
+  Sharpe 1.89 ret +47%. Veredicto formal aún NO-GO (PF 1.22 < 1.3) y muestra
+  corta: **prometedor, no confirmado**. Falta validación multi-año.
+- ⬜ Fase 6 — Frontend — siguiente sesión.

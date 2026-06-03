@@ -25,6 +25,12 @@ def setup_logging(level: str | None = None) -> None:
 
     fmt = logging.Formatter(_FMT)
 
+    # stdout robusto a emojis (alertas) incluso en consolas cp1252 (Windows)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     # stdout → systemd journal
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(fmt)

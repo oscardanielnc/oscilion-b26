@@ -20,7 +20,7 @@ Descubrir el rango en el que oscila cada moneda (BTC, ETH, SOL…), entrar cerca
 
 ## Estado
 
-🟢 Fases 1-4 completas: base del sistema, datos (sin look-ahead), motor de análisis (rangos, régimen, reversión, score 0-100, riesgo L=2%/stop) y backtest honesto (walk-forward + costos reales + go/no-go). Veredicto inicial de la lógica naïve: NO-GO — falta la confirmación de giro (Fase 5) y validación multi-año. Siguiente: Fase 5 (motor en vivo).
+🟢 Fases 1-5 completas: base, datos (sin look-ahead), motor de análisis, backtest honesto y motor en vivo (máquina de estados con confirmación de giro, gestión de salida, calibración forward, alertas ENTRA/TOMA/SAL). La confirmación de giro da vuelta el edge en backtest (Sharpe −0.47 → +1.89 en 1h/~120d); prometedor pero aún no confirmado (falta validación multi-año). Siguiente: Fase 6 (frontend).
 
 ## Stack
 
