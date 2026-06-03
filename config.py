@@ -96,7 +96,8 @@ class Config:
     max_daily_loss: float = _env_float("OSCILION_MAX_DAILY_LOSS", 0.06)   # -6% del capital/día
     max_consecutive_errors: int = _env_int("OSCILION_MAX_ERRORS", 10)     # ticks fallidos seguidos
 
-    # --- notify (Telegram, opcional) ---
+    # --- notify ---
+    ntfy_topic: str = os.getenv("OSCILION_NTFY_TOPIC", "oscar-oscilion-b26")  # push al móvil
     telegram_token: str = os.getenv("OSCILION_TG_TOKEN", "")
     telegram_chat_id: str = os.getenv("OSCILION_TG_CHAT", "")
 
