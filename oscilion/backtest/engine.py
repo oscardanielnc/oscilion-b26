@@ -41,6 +41,7 @@ class BTParams:
     allow_regimes: tuple[str, ...] = ("range", "trend")  # 'chaos' nunca
     require_confirmation: bool = False  # exigir confirmación de giro (Fase 5)
     strategy: str = "reversion"         # reversion | momentum (probe)
+    min_breakout_atr: float = 0.0       # momentum: ruptura mínima en ATR
     costs: CostModel = field(default_factory=lambda: DEFAULT_COSTS)
 
 
@@ -125,6 +126,8 @@ def backtest_symbol(sym: str, tf: str | None = None, p: BTParams | None = None) 
                 cand = candidate_from_df(sym, window, tf=tf, lookback=p.lookback)
             ok = (cand.get("tradeable") and cand.get("score", 0) >= p.min_score
                   and cand.get("regime") in p.allow_regimes)
+            if ok and p.strategy == "momentum" and p.min_breakout_atr > 0:
+                ok = cand.get("components", {}).get("breakout_atr", 0.0) >= p.min_breakout_atr
             if ok and p.require_confirmation:
                 edge = cand.get("lo") if cand["side"] == "long" else cand.get("hi")
                 ok = confirm_turn(window, cand["side"], edge=edge)[0]

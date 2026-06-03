@@ -88,9 +88,14 @@ Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_camp
   MOMENTUM tiene la estructura correcta — calibración monótona (a más fuerza de ruptura,
   más winrate) y el subconjunto de **rupturas fuertes (≥1 ATR) es POSITIVO** neto de costos
   (PF 1.07, +0.125%/trade, 3092 trades). Veredicto: **PIVOTAR a momentum/breakout**, no descartar.
-- Edge fino y umbral ≥1 ATR post-hoc ⇒ pendiente validación OOS, estabilidad del subconjunto
-  filtrado y entradas maker para bajar costos.
-- Reportes: `data/reports/edge_campaign_{1h,15m}.md`, `momentum_probe.md`.
+- **Validación OOS (breakout_oos.py): ✅ edge CONFIRMADO fuera de muestra pero FINO.**
+  La relación "más fuerza de ruptura → mejor" se mantiene monótona en test no visto
+  (PF test 0.92→1.18). Split anclado TEST: PF 1.01 (breakeven+). Walk-forward POOL OOS:
+  PF 1.18, +0.308%/trade, 1505 trades (3/4 folds positivos). Edge real y marginal: vive
+  o muere en la EJECUCIÓN (entradas maker). Decisión del proyecto: **PIVOT = GO**.
+- Pendiente del pivot: entradas maker (bajar costos), TP/trailing para momentum, entender
+  debilidad reciente (2026-H1), sizing de cartera, formalizar tesis en VISION.md.
+- Reportes: `data/reports/edge_campaign_{1h,15m}.md`, `momentum_probe.md`, `breakout_oos.md`.
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
