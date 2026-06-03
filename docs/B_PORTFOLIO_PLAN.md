@@ -48,6 +48,31 @@ serie independiente; falta la vista conjunta.
 B1 (mejores params) → B4/B5 (correlación + límites) → B2/B3 (weights + leverage) → B6 (cartera) →
 forward de la cartera completa. Iterar hasta el equilibrio beneficio/riesgo.
 
+## ✅ Resultados B v1 (2026-06-03) — `data/reports/phase_b.md`
+
+Ejecutada honestamente (selección en train, OOS=2025→ genuino):
+
+- **B1 — params por moneda:** ⚠️ **tunear por moneda SOBREAJUSTA** en muestras chicas
+  (BTC·ema train +0.80 → OOS −0.00; TRX·ema +0.77 → +0.05). **Decisión: NO tunear —
+  usar el baseline fijo `tp_r=4`**, que aguanta OOS en las 6 (BTC +0.13, BNB +0.41,
+  TRX +0.14/+0.34, LINK +0.37, DOT +0.11). Disciplina anti-overfit.
+- **B2 — weights:** equal-weight gana a edge-weight in-sample (que sobreajusta).
+  **v1 = equal-weight.**
+- **B3 — leverage:** se mantiene `L = 2%/stop` (invariante); **sin multiplicador extra**
+  v1 (la convicción no demostró edge → no añadir riesgo).
+- **B4 — correlación:** TRX diversifica (~0.1 reciente); {BTC,BNB,LINK,DOT} clúster (~0.7).
+- **B5 — límites:** **máx 3 concurrentes, máx 2 por clúster** (control de concentración).
+- **B6 — cartera (cuenta única, OOS):** mejor esquema robusto = **equal + maxc3 + clu2** →
+  **OOS Sharpe 1.89, retorno +207%, MaxDD −26%** (533 trades). "Sin límites" daba Sharpe
+  1.98 pero con concentración no controlada → descartado por riesgo.
+
+⚠️ **Honestidad:** los retornos son de backtest compuesto y deben **confirmarse en FORWARD
+(Fase A) en la VM** antes de creerlos; el número sobrio es el **MaxDD ~26%** (el riesgo real
+del pilot). Config elegida persistida en `oscilion/strategies/tuned.py` (generada, en uso).
+
+**Pendiente B (futuro, con más datos forward):** re-tunear params cuando haya más muestra,
+weights dinámicos validados, re-correr correlación periódicamente, simular con fees maker.
+
 ## Estado del scaffold
 `oscilion/strategies/portfolio.py` tiene `equal_weights()` provisional + límites + TODOs.
 `assignment.py` tiene `weight=None` por serie (B lo rellena). El motor (`engine_strat`) y el
