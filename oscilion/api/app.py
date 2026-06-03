@@ -39,6 +39,17 @@ def status() -> dict:
     }
 
 
+@app.get("/data")
+def data_status() -> list[dict]:
+    """Estado/auditoría del histórico descargado (Fase 2)."""
+    with db._lock:
+        rows = db.get_connection().execute(
+            "SELECT exchange, sym, tf, source, rows, gaps, dupes, first_ts, last_ts, updated_at"
+            " FROM ohlcv_status ORDER BY sym, source, tf"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.get("/events")
 def events(limit: int = 50) -> list[dict]:
     limit = max(1, min(limit, 500))

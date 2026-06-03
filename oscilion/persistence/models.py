@@ -9,7 +9,7 @@ añadirán como sentencias idempotentes.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
@@ -107,6 +107,23 @@ TABLES: dict[str, str] = {
             msg         TEXT    NOT NULL,
             extra       TEXT,                      -- JSON opcional
             created_at  INTEGER NOT NULL
+        )
+    """,
+    # Estado/auditoría del histórico descargado (Fase 2). Agregado upsert
+    # por (exchange, sym, tf): el detalle vive en parquet; aquí el resumen.
+    "ohlcv_status": """
+        CREATE TABLE IF NOT EXISTS ohlcv_status (
+            exchange    TEXT    NOT NULL,
+            sym         TEXT    NOT NULL,
+            tf          TEXT    NOT NULL,
+            first_ts    INTEGER,
+            last_ts     INTEGER,
+            rows        INTEGER NOT NULL DEFAULT 0,
+            gaps        INTEGER NOT NULL DEFAULT 0,
+            dupes       INTEGER NOT NULL DEFAULT 0,
+            source      TEXT,                      -- ohlcv | funding
+            updated_at  INTEGER NOT NULL,
+            PRIMARY KEY (exchange, sym, tf, source)
         )
     """,
     # Control interno de versión de esquema.

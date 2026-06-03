@@ -78,4 +78,8 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
 - ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
   append-only (SQLite WAL), orquestador resiliente, circuit breaker, notify,
   API mínima y despliegue (systemd + `deploy.sh`/`setup_vm.sh`). Verificado.
-- ⬜ Fase 2 — Datos — siguiente sesión.
+- ✅ Fase 2 — Datos: `data/{fetch,store,universe,pipeline}.py`, OHLCV multi-TF
+  + funding (ccxt/Binance), **sin look-ahead** (descarta vela en curso),
+  parquet + DB (`ohlcv_status`), detección de huecos/dups, reporte de calidad,
+  CLI `python -m oscilion.data` y endpoint `/data`. Verificado contra Binance.
+- ⬜ Fase 3 — Motor de análisis — siguiente sesión.
