@@ -8,6 +8,7 @@ APP_DIR=/opt/oscilion
 APP_USER=oscilion
 ENV_FILE=/etc/oscilion.env
 REPO=${OSCILION_REPO:-https://github.com/oscardanielnc/oscilion-b26.git}
+PYBIN=${PYTHON:-python3}          # override: PYTHON=python3.12 sudo -E bash setup_vm.sh
 
 echo "==> Oscilion :: setup_vm"
 
@@ -16,11 +17,17 @@ if ! id "$APP_USER" &>/dev/null; then
   useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
 fi
 
-# 2) Dependencias del sistema
+# 2) Dependencias del sistema (multi-distro: apt / dnf / yum)
 if command -v apt-get &>/dev/null; then
   apt-get update -y
   apt-get install -y python3 python3-venv python3-pip git
+elif command -v dnf &>/dev/null; then
+  dnf install -y python3 python3-pip git          # Oracle Linux / RHEL / Fedora
+elif command -v yum &>/dev/null; then
+  yum install -y python3 python3-pip git
 fi
+# marcar el repo como seguro para git (evita "dubious ownership")
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 
 # 3) Código
 if [ ! -d "$APP_DIR/.git" ]; then
@@ -29,8 +36,9 @@ if [ ! -d "$APP_DIR/.git" ]; then
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
-# 4) Virtualenv + deps
-sudo -u "$APP_USER" python3 -m venv "$APP_DIR/.venv"
+# 4) Virtualenv + deps  (requiere Python ≥ 3.10)
+echo "==> Python: $($PYBIN --version)"
+sudo -u "$APP_USER" "$PYBIN" -m venv "$APP_DIR/.venv"
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --upgrade pip
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
