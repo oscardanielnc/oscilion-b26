@@ -101,6 +101,30 @@ Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_camp
   subir sample (multi-TF/instrumentos), sizing de cartera, forward-test en vivo.
 - Reportes: `data/reports/{edge_campaign_1h,edge_campaign_15m,momentum_probe,breakout_oos,breakout_robustness,breakout_recency}.md`.
 
+---
+
+## 🗺️ Fase de pruebas — rescate del proyecto BTC/Sentinel (multi-sesión)
+
+Contexto: la revisión de `C:\Users\LENOVO\btc` (ver `docs/BTC_SALVAGE.md`) confirma —de
+forma independiente— el pivot de Oscilion: la reversión pierde, momentum/tendencia/breakout
+ganan OOS. Aporta datos (5 años 1m BTC + 14 alts), 5 estrategias direccionales y aprendizajes.
+**Pero sus backtests salieron de un harness optimista** ⇒ todo se re-valida con el motor
+honesto de Oscilion. Plan por sesiones (cada una entrega evidencia o mata una hipótesis):
+
+| Sesión | Objetivo | Entregable | Hipótesis |
+|---|---|---|---|
+| **R0** ✅ | Revisión a fondo + plan | `BTC_SALVAGE.md` + esta hoja de ruta | — |
+| **R1** | Ingerir datos BTC (1m/funding + 14 alts) a Oscilion; loaders sin look-ahead; **motor de salida 1m pesimista** opcional en el engine | datos verificados + engine con exits 1m | — |
+| **R2** | Portar **MOMENTUM_PULLBACK** y **EMA_TREND_STACK** (las de mejor OOS) como candidatos de señal; validar honesto multi-moneda (OOS, costos reales) | reporte por estrategia/moneda | H1, H4 |
+| **R3** | Portar **ORB_BREAKOUT**, **VWAP_ANCHOR**, **BREAK_RETEST**; implementar el **gate de frescura** (entrar antes de que EMA 1H confirme) como feature transversal y medir su aporte | reporte + A/B del gate | H1, H2 |
+| **R4** | **Ejecución maker**: modelar fills límite (no-fill / adverse selection) y re-validar las supervivientes | comparación taker vs maker | H3 |
+| **R5** | **Exits**: grid por estrategia (TP fijo vs trailing vs hold-a-T2); **régimen** y **sesión** como filtros | exit óptimo por táctica | H5, H7, H8 |
+| **R6** | **Cartera**: combinar supervivientes poco correlacionados; calibración forward; **forward-test en vivo (dry-run)** acumulando track record | señal multi-moneda + monitor | H6 |
+
+Gate de cada estrategia para "sobrevivir": OOS ≥ 0.70 vs baseline · expectativa positiva
+neta de costos · calibración monótona · estable en walk-forward. Lo que no pasa, se archiva
+con evidencia (no se fuerza). Hipótesis H1–H8 detalladas en `docs/BTC_SALVAGE.md §6`.
+
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
 - ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
