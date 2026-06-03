@@ -1,0 +1,5 @@
+# Forzar LF en archivos que corren en Linux (VM Oracle).
+*.sh        text eol=lf
+*.service   text eol=lf
+*.py        text eol=lf
+example.env text eol=lf

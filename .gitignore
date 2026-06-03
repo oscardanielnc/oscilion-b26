@@ -1,0 +1,38 @@
+# --- Oscilion ---
+# Datos y artefactos (nunca al repo)
+data/
+logs/
+*.db
+*.db-wal
+*.db-shm
+*.parquet
+
+# Secretos / entorno
+.env
+*.env
+!example.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Frontend (Fase 6)
+frontend/node_modules/
+frontend/dist/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

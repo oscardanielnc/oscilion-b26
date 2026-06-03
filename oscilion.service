@@ -1,0 +1,22 @@
+[Unit]
+Description=Oscilion — orquestador (cerebro de señales)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oscilion
+Group=oscilion
+WorkingDirectory=/opt/oscilion
+EnvironmentFile=/etc/oscilion.env
+ExecStart=/opt/oscilion/.venv/bin/python -m oscilion
+Restart=always
+RestartSec=30
+# Reinicio resiliente: si falla en bucle, espera y sigue intentando.
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oscilion
+
+[Install]
+WantedBy=multi-user.target

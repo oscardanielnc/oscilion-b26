@@ -1,0 +1,18 @@
+# Oscilion — dependencias
+# Núcleo numérico / análisis (Fases 3-4)
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+statsmodels>=0.14
+
+# Datos de mercado (Fase 2)
+ccxt>=4.2
+pyarrow>=14.0          # parquet
+
+# API / dashboard (Fase 6, esqueleto desde F1)
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
+# Infra
+python-dotenv>=1.0     # carga de /etc/oscilion.env en local/dev
+requests>=2.31         # notify (Telegram)
