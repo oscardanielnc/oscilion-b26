@@ -1,0 +1,21 @@
+[Unit]
+Description=Oscilion — API / dashboard (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oscilion
+Group=oscilion
+WorkingDirectory=/opt/oscilion
+EnvironmentFile=/etc/oscilion.env
+ExecStart=/opt/oscilion/.venv/bin/python -m oscilion.api
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oscilion-api
+
+[Install]
+WantedBy=multi-user.target
