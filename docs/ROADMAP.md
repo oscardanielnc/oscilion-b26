@@ -75,4 +75,7 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
-- ⬜ Fase 1 — siguiente sesión.
+- ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
+  append-only (SQLite WAL), orquestador resiliente, circuit breaker, notify,
+  API mínima y despliegue (systemd + `deploy.sh`/`setup_vm.sh`). Verificado.
+- ⬜ Fase 2 — Datos — siguiente sesión.
