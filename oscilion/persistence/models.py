@@ -9,7 +9,7 @@ añadirán como sentencias idempotentes.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
@@ -142,6 +142,16 @@ TABLES: dict[str, str] = {
             source      TEXT,                      -- ohlcv | funding
             updated_at  INTEGER NOT NULL,
             PRIMARY KEY (exchange, sym, tf, source)
+        )
+    """,
+    # Estado del monitor en vivo (current-state, upsert) — para sobrevivir reinicios:
+    # posiciones virtuales abiertas + cursores por (sym|strategy). Sin esto, un
+    # Restart=always perdería las posiciones y dejaría huecos en el forward-test.
+    "monitor_state": """
+        CREATE TABLE IF NOT EXISTS monitor_state (
+            key         TEXT PRIMARY KEY,         -- "<sym>|<strategy>"
+            state       TEXT NOT NULL,            -- JSON: position, last_sig_ts, last_15m_ts
+            updated_at  INTEGER NOT NULL
         )
     """,
     # Control interno de versión de esquema.
