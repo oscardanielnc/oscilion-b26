@@ -133,9 +133,12 @@ con evidencia (no se fuerza). Hipótesis H1–H8 detalladas en `docs/BTC_SALVAGE
   → tabla `forward_results`), `live/monitor.py` (dry-run: alertas ENTRA/SAL + trades virtuales con
   R), orquestador reapuntado, API `/forward` `/trades` `/state`, CLI `python -m oscilion.live.forward`.
   Directiva permanente: logs concisos en BD consultables desde el frontend.
-- ⏳ **Fase B — cartera**: scaffold listo (`strategies/portfolio.py`); plan en `B_PORTFOLIO_PLAN.md`;
-  mapa de correlación v1 hecho (TRX diversifica; BTC/BNB/LINK/DOT clúster). Pendiente: params por
-  moneda, weights, leverage, límites, simulación de cartera (cuenta única).
+- ✅ **Fase B — cartera v1** (`research/phase_b.py`, `data/reports/phase_b.md`): hecha con
+  disciplina anti-overfit. B1: tunear por moneda sobreajusta → **baseline fijo tp_r=4** (aguanta
+  OOS en las 6). B2: **equal-weight** (edge-weight sobreajusta). B3: L=2%/stop, **sin multiplicador**.
+  B4: correlación (TRX diversifica). B5: **máx 3 concurrentes, 2 por clúster**. B6: cartera OOS
+  **Sharpe 1.89, ret +207%, MaxDD −26%**. Config en `oscilion/strategies/tuned.py` (en uso).
+  Pendiente futuro: re-tunear con más datos forward, weights dinámicos, fees maker.
 - ⬜ **Frontend** (React) → **Deploy v1 en VM Oracle** (fijar inception) → vigilancia diaria.
 
 ### Estado actual

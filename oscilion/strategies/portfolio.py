@@ -15,10 +15,33 @@ from dataclasses import dataclass
 
 from oscilion.strategies.assignment import all_assignments
 
-# límites duros del pilot (ajustables en B)
-MAX_CONCURRENT = 3            # máx. posiciones simultáneas
+# Config afinada en Fase B (generada por research/phase_b.py). Si no existe, baseline.
+try:
+    from oscilion.strategies import tuned as _t
+    WEIGHTS: dict = dict(_t.WEIGHTS)
+    CLUSTERS: dict = dict(_t.CLUSTERS)
+    MAX_CONCURRENT = int(_t.LIMITS.get("max_concurrent", 3))
+    MAX_PER_CLUSTER = int(_t.LIMITS.get("max_per_cluster", 2))
+    _TUNED = True
+except Exception:
+    WEIGHTS, CLUSTERS = {}, {}
+    MAX_CONCURRENT, MAX_PER_CLUSTER = 3, 2
+    _TUNED = False
+
 MAX_TOTAL_EXPOSURE = 1.0      # fracción máx. del capital desplegada a la vez
-DEFAULT_LEVERAGE = 1.0        # multiplicador sobre el capital asignado (a tunear)
+DEFAULT_LEVERAGE = 1.0        # multiplicador sobre capital asignado (B: sin extra v1)
+
+
+def key(sym: str, strategy: str) -> str:
+    return f"{sym}|{strategy}"
+
+
+def weight_of(sym: str, strategy: str) -> float:
+    return WEIGHTS.get(key(sym, strategy), 1.0)
+
+
+def cluster_of(sym: str, strategy: str) -> str:
+    return CLUSTERS.get(key(sym, strategy), sym)
 
 
 @dataclass
