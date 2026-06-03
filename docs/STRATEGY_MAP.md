@@ -51,6 +51,15 @@ con filtros (rango<1.5%, sesión, EMA50, frescura) que lo mejoran y lo extienden
 **Coins sin edge limpio (SOL, ETH, AVAX):** no se operan hasta encontrarles una táctica
 propia (futuras sesiones). Disciplina: si no hay edge, no se opera esa moneda.
 
+## 3b. Exits — TP fijo vs trailing (R5)
+Probado TP fijo `tp_r=4` vs trailing ATR (1.5/2/3) con entrada fija, por moneda:
+- **EMA_TREND_STACK → TP fijo amplio (tp_r=4) gana**; el trailing lo descose
+  (BTC/BNB/TRX mejores con fijo).
+- **ORB_BREAKOUT → trailing 2–3·ATR es competitivo o mejor OOS** en DOT, ADA, DOGE;
+  comparable en LINK/TRX. Diferencias dentro del ruido.
+- Decisión: **`tp_r=4` fijo como base** para ambos; trailing = tweak futuro para ORB.
+  Reporte: `data/reports/r5_exit_check.md`.
+
 ## 4. Aprendizajes consolidados (R1–R3)
 - **Dejar correr ganadores** (tp_r alto / sin TP + timeout) supera al TP en borde opuesto.
 - **La estrategia depende del carácter de la moneda:** trend-stack ≠ sirve en choppy;
