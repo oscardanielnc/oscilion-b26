@@ -93,9 +93,13 @@ Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_camp
   (PF test 0.92→1.18). Split anclado TEST: PF 1.01 (breakeven+). Walk-forward POOL OOS:
   PF 1.18, +0.308%/trade, 1505 trades (3/4 folds positivos). Edge real y marginal: vive
   o muere en la EJECUCIÓN (entradas maker). Decisión del proyecto: **PIVOT = GO**.
-- Pendiente del pivot: entradas maker (bajar costos), TP/trailing para momentum, entender
-  debilidad reciente (2026-H1), sizing de cartera, formalizar tesis en VISION.md.
-- Reportes: `data/reports/edge_campaign_{1h,15m}.md`, `momentum_probe.md`, `breakout_oos.md`.
+- **Robustez + recencia:** el edge es amplio (9/12 monedas) y mejor en régimen `range`;
+  el filtro **`range` + ruptura ≥2 ATR repara el período reciente** (único con 2025Q4→ positivo:
+  PF 1.17). Estrategia candidata definida. Caveat: baja frecuencia (~323 trades/3a) ⇒ ruido.
+- **Documentación completa del pivot en `docs/FINDINGS.md`** (hallazgos, consideraciones, backlog).
+- Backlog priorizado: ejecución maker (mayor impacto), confirmar candidato OOS, TP/trailing,
+  subir sample (multi-TF/instrumentos), sizing de cartera, forward-test en vivo.
+- Reportes: `data/reports/{edge_campaign_1h,edge_campaign_15m,momentum_probe,breakout_oos,breakout_robustness,breakout_recency}.md`.
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).

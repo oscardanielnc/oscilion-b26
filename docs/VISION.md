@@ -1,5 +1,13 @@
 # Oscilion — Visión
 
+> ⚠️ **ACTUALIZACIÓN 2026-06-03 — PIVOT.** La validación honesta (12 monedas × 3
+> años, neto de costos) **descartó la tesis de reversión** de este documento: no
+> tiene edge y su calibración está invertida. El edge está en la **RUPTURA**
+> (momentum/breakout de rango), no en el rebote — exactamente el riesgo que el §
+> "veredicto honesto" marcó como decisivo. Ver **`docs/FINDINGS.md`** para la
+> tesis vigente y los resultados. El resto de este documento queda como registro
+> histórico de la hipótesis v1; los principios y el modelo de riesgo siguen vigentes.
+
 ## 🎯 Qué es
 
 Sistema que analiza BTC, ETH, SOL y otras criptos para descubrir **rangos de oscilación** (horizontales y diagonales) y operar **reversión intradía** con alta convicción: entrar cerca de un borde del rango *con confirmación de giro*, salir en el borde opuesto, y proteger con un stop calculado contra barridas.
