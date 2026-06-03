@@ -81,7 +81,10 @@ Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_camp
 - Calibración **invertida** (mayor score ⇒ peor winrate) ⇒ score mal especificado.
 - Salidas: stop 66% vs TP 10% ⇒ la tesis "entrar en borde / salir en el opuesto" no se cumple.
 - El Sharpe 1.89 previo (BTC, 120d) era suerte de muestra (única ventana favorable).
+- **15m confirma:** misma campaña en 15m = aún peor (PF 0.71–0.76; más frecuencia ⇒ más
+  costos). El timeframe NO es el problema; es la SEÑAL.
 - La INFRA (datos, backtest, riesgo, motor en vivo) es sólida y reutilizable; el problema es la SEÑAL.
+- Reportes: `data/reports/edge_campaign_{1h,15m}.md`.
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
