@@ -20,7 +20,7 @@ Descubrir el rango en el que oscila cada moneda (BTC, ETH, SOL…), entrar cerca
 
 ## Estado
 
-🟡 Fase 0 completa (visión + arquitectura). Fase 1 (base del sistema) pendiente.
+🟢 Fase 1 completa (base del sistema: infra resiliente + persistencia append-only + despliegue). Siguiente: Fase 2 (datos).
 
 ## Stack
 
