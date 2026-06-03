@@ -73,6 +73,16 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
 
 ---
 
+### 🚦 Veredicto go/no-go (2026-06-03)
+
+Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_campaign.py`).
+**Resultado: la estrategia v1 (reversión en bordes de rango) NO tiene edge → PIVOTAR.**
+- Todas las configs pierden (PF 0.72–0.78); los 12 símbolos negativos.
+- Calibración **invertida** (mayor score ⇒ peor winrate) ⇒ score mal especificado.
+- Salidas: stop 66% vs TP 10% ⇒ la tesis "entrar en borde / salir en el opuesto" no se cumple.
+- El Sharpe 1.89 previo (BTC, 120d) era suerte de muestra (única ventana favorable).
+- La INFRA (datos, backtest, riesgo, motor en vivo) es sólida y reutilizable; el problema es la SEÑAL.
+
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
 - ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
