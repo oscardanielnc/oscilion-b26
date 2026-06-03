@@ -22,12 +22,25 @@ if command -v apt-get &>/dev/null; then
   apt-get update -y
   apt-get install -y python3 python3-venv python3-pip git
 elif command -v dnf &>/dev/null; then
-  dnf install -y python3 python3-pip git          # Oracle Linux / RHEL / Fedora
+  dnf install -y python3.11 python3.11-pip git    # Oracle Linux / RHEL (NO toca el python3 del sistema)
 elif command -v yum &>/dev/null; then
-  yum install -y python3 python3-pip git
+  yum install -y python3.11 python3.11-pip git
 fi
 # marcar el repo como seguro para git (evita "dubious ownership")
 git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
+# elegir intérprete >= 3.10 (NO usar el python3 del sistema si es viejo, p.ej. 3.9
+# en Oracle Linux — kepler/opportunity_alert dependen de ese 3.9, no se toca)
+if [ -z "${PYTHON:-}" ]; then
+  for c in python3.12 python3.11 python3.10 python3; do
+    if command -v "$c" &>/dev/null && "$c" -c 'import sys; exit(0 if sys.version_info>=(3,10) else 1)' 2>/dev/null; then
+      PYBIN="$c"; break
+    fi
+  done
+fi
+if ! "$PYBIN" -c 'import sys; exit(0 if sys.version_info>=(3,10) else 1)' 2>/dev/null; then
+  echo "ERROR: se requiere Python >= 3.10. Instala python3.11 (dnf install -y python3.11)."; exit 1
+fi
 
 # 3) Código
 if [ ! -d "$APP_DIR/.git" ]; then
