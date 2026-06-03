@@ -84,7 +84,13 @@ Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_camp
 - **15m confirma:** misma campaña en 15m = aún peor (PF 0.71–0.76; más frecuencia ⇒ más
   costos). El timeframe NO es el problema; es la SEÑAL.
 - La INFRA (datos, backtest, riesgo, motor en vivo) es sólida y reutilizable; el problema es la SEÑAL.
-- Reportes: `data/reports/edge_campaign_{1h,15m}.md`.
+- **Pivot identificado (probe momentum/breakout):** la reversión pierde (PF 0.76) pero el
+  MOMENTUM tiene la estructura correcta — calibración monótona (a más fuerza de ruptura,
+  más winrate) y el subconjunto de **rupturas fuertes (≥1 ATR) es POSITIVO** neto de costos
+  (PF 1.07, +0.125%/trade, 3092 trades). Veredicto: **PIVOTAR a momentum/breakout**, no descartar.
+- Edge fino y umbral ≥1 ATR post-hoc ⇒ pendiente validación OOS, estabilidad del subconjunto
+  filtrado y entradas maker para bajar costos.
+- Reportes: `data/reports/edge_campaign_{1h,15m}.md`, `momentum_probe.md`.
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).

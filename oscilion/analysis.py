@@ -62,6 +62,56 @@ def candidate_from_df(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96
     }
 
 
+def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96,
+                       buffer_atr: float = 0.5) -> dict:
+    """Señal de MOMENTUM/breakout (probe contrarian a la reversión).
+
+    Entra cuando el precio ROMPE un borde del rango (continuación), con stop de
+    vuelta dentro del rango (anti-fakeout + ATR) y TP por proyección del ancho
+    del rango (measured move). Misma forma de salida que `candidate_from_df`.
+    """
+    from oscilion.features import indicators as ind
+    from oscilion.features import ranges as rng
+    from oscilion.features import regime as rg
+
+    base = {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0, "side": None}
+    if df.empty or len(df) < 40:
+        return {**base, "reason": "sin datos suficientes"}
+
+    hz = rng.horizontal_range(df, lookback)
+    lo, hi, mid, width = hz["lo"], hz["hi"], hz["mid"], None
+    if not (np.isfinite(lo) and np.isfinite(hi) and hi > lo):
+        return {**base, "reason": "rango no definido"}
+    width = hi - lo
+    last = float(df["close"].iloc[-1])
+    atr = float(ind.atr(df).iloc[-1])
+    if not np.isfinite(atr) or atr <= 0:
+        return {**base, "reason": "atr inválido"}
+    regime = rg.classify_regime(df, lookback).regime
+
+    if last > hi:                       # ruptura alcista → long de continuación
+        side, entry, stop, tp = "long", last, hi - buffer_atr * atr, last + width
+        brk = (last - hi) / atr
+    elif last < lo:                     # ruptura bajista → short de continuación
+        side, entry, stop, tp = "short", last, lo + buffer_atr * atr, last - width
+        brk = (lo - last) / atr
+    else:
+        return {**base, "reason": "sin ruptura"}
+
+    math = sizing.compute(side, entry, stop, tp)
+    score = max(0.0, min(100.0, 40 + 60 * min(1.0, brk)))
+    atr_pct = atr / entry if entry else float("nan")
+    return {
+        **base, "score": round(score, 1), "side": side, "tradeable": math.tradeable,
+        "regime": regime, "entry": entry, "stop": stop, "tp": tp,
+        "stop_pct": math.stop_pct, "profit_pct": math.profit_pct, "rr": math.rr,
+        "leverage": math.leverage, "lo": lo, "hi": hi, "mid": mid,
+        "position": float((last - lo) / width), "width_pct": float(width / mid),
+        "atr_pct": atr_pct, "vol": atr_pct if np.isfinite(atr_pct) else 1.0,
+        "components": {"breakout_atr": float(brk)},
+    }
+
+
 def analyze(sym: str, *, tf: str | None = None, lookback: int = 96) -> dict:
     """Candidato completo para un símbolo cargando su histórico (live)."""
     tf = tf or config.base_timeframe
