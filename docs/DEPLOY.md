@@ -47,11 +47,14 @@ ssh -L 8787:127.0.0.1:8787 usuario@IP_VM
 # luego abre en tu navegador:  http://localhost:8787
 ```
 
-## 5. Actualizaciones futuras (un comando)
-Tras hacer push de cambios desde tu PC:
+## 5. Actualizaciones futuras (UN comando, estilo kepler)
+Tras hacer push de cambios desde tu PC, en la VM desde **cualquier** directorio:
 ```bash
-sudo bash /opt/oscilion/deploy.sh      # git pull -> deps -> build -> verifica -> restart
+bash /opt/oscilion/deploy.sh
 ```
+Hace todo: `git pull` → dependencias → verificación de import → reinicia `oscilion`
+y `oscilion-api` → resumen de estado. No requiere `sudo` (lo usa internamente solo
+para systemctl). Si el import falla, **aborta sin reiniciar** (no despliega algo roto).
 
 ## 6. Revisión diaria (logs MÍNIMOS para compartir)
 Para que me los pases sin saturar, comparte cualquiera de estos (son concisos):
