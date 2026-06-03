@@ -35,6 +35,9 @@ class StratParams:
     max_hold_signal_bars: int = 60        # timeout en barras de la señal
     costs: CostModel = field(default_factory=lambda: DEFAULT_COSTS)
     maker_entry: bool = False             # R4 lo activará
+    exit_mode: str = "fixed_tp"           # fixed_tp | trailing (R5)
+    trail_atr: float = 2.0                # distancia de trailing en ATR de la señal
+    be_at_r: float = 1.0                  # mover a break-even a +be_at_r·R
     params: dict = field(default_factory=dict)
 
 
@@ -136,28 +139,52 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         risk_amt = equity * p.risk
         notional = risk_amt / (risk_dist / entry_px)
         entry_fee = p.costs.fee(notional, maker=maker)
+        atr_sig = float(sig.atr[i]) if np.isfinite(sig.atr[i]) else risk_dist
 
-        # caminar velas finas hasta SL/TP (pesimista) / timeout
+        # caminar velas finas hasta salida (pesimista: stop antes que TP) / timeout
         exit_px = exit_reason = None
         k = ei
         deadline = T + max_hold_ms
-        while k < n_exit and ets[k] <= deadline:
-            hi, lo = eh[k], el[k]
-            if side == "long":
-                hit_stop, hit_tp = lo <= stop, hi >= tp
-            else:
-                hit_stop, hit_tp = hi >= stop, lo <= tp
-            if hit_stop:
-                exit_px, exit_reason = stop, "stop"; break
-            if hit_tp:
-                exit_px, exit_reason = tp, "tp"; break
-            k += 1
+        if p.exit_mode == "trailing":
+            trail_d = p.trail_atr * atr_sig
+            be_move = p.be_at_r * risk_dist
+            cur_stop = stop
+            best = entry_px
+            while k < n_exit and ets[k] <= deadline:
+                hi, lo = eh[k], el[k]
+                # 1) chequear stop con el nivel vigente (de barras previas) — pesimista
+                if (side == "long" and lo <= cur_stop) or (side == "short" and hi >= cur_stop):
+                    exit_px, exit_reason = cur_stop, "trail"; break
+                # 2) actualizar mejor precio y ratchet del stop
+                if side == "long":
+                    best = max(best, hi)
+                    if best - entry_px >= be_move:
+                        cur_stop = max(cur_stop, entry_px)
+                    cur_stop = max(cur_stop, best - trail_d)
+                else:
+                    best = min(best, lo)
+                    if entry_px - best >= be_move:
+                        cur_stop = min(cur_stop, entry_px)
+                    cur_stop = min(cur_stop, best + trail_d)
+                k += 1
+        else:
+            while k < n_exit and ets[k] <= deadline:
+                hi, lo = eh[k], el[k]
+                if side == "long":
+                    hit_stop, hit_tp = lo <= stop, hi >= tp
+                else:
+                    hit_stop, hit_tp = hi >= stop, lo <= tp
+                if hit_stop:
+                    exit_px, exit_reason = stop, "stop"; break
+                if hit_tp:
+                    exit_px, exit_reason = tp, "tp"; break
+                k += 1
         if exit_px is None:                  # timeout o fin de datos
             k = min(k, n_exit - 1)
             exit_px, exit_reason = float(ec[k]), "timeout"
         exit_ts = int(ets[k])
 
-        taker_exit = exit_reason in ("stop", "timeout")
+        taker_exit = exit_reason in ("stop", "timeout", "trail")
         exit_fill = p.costs.fill_price(exit_px, side, is_entry=False, maker=not taker_exit)
         fees = entry_fee + p.costs.fee(notional, maker=not taker_exit)
         fund = 0.0
