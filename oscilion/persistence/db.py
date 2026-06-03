@@ -135,6 +135,27 @@ def log_event(level: str, module: str, msg: str, extra: dict | None = None) -> O
                                   module=module, msg=msg, extra=_jdump(extra)))
 
 
+def upsert_ohlcv_status(
+    exchange: str, sym: str, tf: str, source: str, *,
+    first_ts: int | None, last_ts: int | None,
+    rows: int, gaps: int = 0, dupes: int = 0,
+) -> None:
+    """Resumen auditable del histórico por (exchange, sym, tf, source)."""
+    try:
+        with _lock:
+            get_connection().execute(
+                "INSERT INTO ohlcv_status"
+                " (exchange, sym, tf, source, first_ts, last_ts, rows, gaps, dupes, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(exchange, sym, tf, source) DO UPDATE SET"
+                "  first_ts=excluded.first_ts, last_ts=excluded.last_ts, rows=excluded.rows,"
+                "  gaps=excluded.gaps, dupes=excluded.dupes, updated_at=excluded.updated_at",
+                (exchange, sym, tf, source, first_ts, last_ts, rows, gaps, dupes, _now_ms()),
+            )
+    except Exception:
+        log.exception("Fallo al upsert ohlcv_status %s %s %s", sym, tf, source)
+
+
 def counts() -> dict[str, int]:
     """Conteo de filas por tabla (para /status del API y diagnósticos)."""
     out: dict[str, int] = {}
