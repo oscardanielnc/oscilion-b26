@@ -134,6 +134,7 @@ def backtest_symbol(sym: str, tf: str | None = None, p: BTParams | None = None) 
             if ok:
                 pending = {"side": cand["side"], "stop": cand["stop"], "tp": cand["tp"],
                            "score": cand["score"], "regime": cand["regime"],
+                           "vol_regime": cand.get("vol_regime"),
                            "rr_planned": cand["rr"], "leverage": cand["leverage"]}
 
     return trades
@@ -153,7 +154,8 @@ def _close(pos: dict, exit_px: float, exit_ts: int, exit_i: int,
     risk_dist = abs(entry - pos["stop"])
     rr_realized = (price_ret * entry) / risk_dist if risk_dist > 0 else 0.0
     return {
-        "sym": pos["sym"], "side": side, "regime": pos["regime"], "score": pos["score"],
+        "sym": pos["sym"], "side": side, "regime": pos["regime"],
+        "vol_regime": pos.get("vol_regime"), "score": pos["score"],
         "entry_ts": pos["entry_ts"], "exit_ts": exit_ts, "bars_held": exit_i - pos["entry_i"],
         "entry": entry, "exit": exit_px, "stop": pos["stop"], "tp": pos["tp"],
         "notional": notional, "leverage": pos["leverage"], "exit_reason": reason,
