@@ -10,7 +10,12 @@
 
 ## ⏳ DECISIONES PENDIENTES (para Oscar — responder al despertar)
 
-La ejecución NO se detiene por estas; las dejo con mi recomendación y sigo con R3.
+La ejecución NO se detiene por estas; las dejo con mi recomendación.
+
+> **ACTUALIZACIÓN R3 (hecho):** porté ORB_BREAKOUT y BREAK_RETEST. **ORB es el
+> workhorse multi-moneda** (mediana +0.029, 8/11 positivas) y RESCATA a LINK y DOT
+> (donde trend-follow fallaba). El **mapa estrategia×moneda y la dirección propuesta
+> están en `docs/STRATEGY_MAP.md`** (léelo primero). Decisión grande nueva (#6 abajo).
 
 1. **Incorporar los supervivientes de alta convicción**: EMA_TREND_STACK (con
    `tp_r=4`, gate de frescura, filtro de sesión) en **BTC, BNB, TRX**.
@@ -28,6 +33,14 @@ La ejecución NO se detiene por estas; las dejo con mi recomendación y sigo con
    adoptar esto para las estrategias de tendencia? → *Recomiendo SÍ.* [SÍ / discutir]
 5. **Ejecución maker (R4)**: el lift medido es chico (+0.015 a +0.04R) → no es el
    salvador que esperábamos. ¿Lo bajamos de prioridad? → *Recomiendo SÍ, baja prioridad.*
+6. **(NUEVA) Adoptar la dirección de dos motores por-moneda** (ver STRATEGY_MAP.md):
+   EMA_TREND_STACK para large-caps de tendencia limpia (BTC/BNB/TRX) + ORB_BREAKOUT
+   para alts (LINK/DOT/TRX + marginales). Núcleo de alta convicción:
+   **BTC, BNB, TRX, LINK, DOT**. → *Recomiendo adoptar esto como dirección de Oscilion.*
+   [adoptar / discutir]
+7. **SOL/ETH/AVAX**: sin edge limpio en ninguna de las 4 estrategias. ¿Las dejamos
+   fuera del universo operable por ahora (disciplina) y buscamos táctica propia después?
+   → *Recomiendo dejarlas fuera hasta tener edge demostrado.*
 
 ---
 

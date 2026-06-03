@@ -116,7 +116,7 @@ honesto de Oscilion. Plan por sesiones (cada una entrega evidencia o mata una hi
 | **R0** ✅ | Revisión a fondo + plan | `BTC_SALVAGE.md` + esta hoja de ruta | — |
 | **R1** ✅ | Resample causal 1h→2h/4h; **motor honesto con salida 15m pesimista** (`engine_strat.py`); BTC 1m ingerido; 15m≈1m verificado | engine + datos | — |
 | **R2** ✅ | Portadas MOMENTUM_PULLBACK y EMA_TREND_STACK; validación honesta **por moneda** (default+sweep OOS+walk-forward) + chequeo taker/maker | `VALIDATION_R1_R2.md` | H1✅, H3 (maker chico), H4✅ |
-| **R3** ⏳ | Portar **ORB_BREAKOUT**, **VWAP_ANCHOR**, **BREAK_RETEST** (gate de frescura ya incluido); validar por moneda — ¿rescatan a las 9 monedas donde trend-follow falla? | reporte por estrategia/moneda | H1, H2 |
+| **R3** ✅ | Portadas **ORB_BREAKOUT** y **BREAK_RETEST** (gate de frescura incluido); validadas por moneda. **ORB rescata alts** (mediana +0.029; genuinos LINK/DOT/TRX). break_retest falla salvo TRX. VWAP_ANCHOR pendiente (opcional). | `STRATEGY_MAP.md` | H1✅, H2 (gate incluido) |
 | **R4** | **Ejecución maker**: modelar fills límite (no-fill / adverse selection) y re-validar las supervivientes | comparación taker vs maker | H3 |
 | **R5** | **Exits**: grid por estrategia (TP fijo vs trailing vs hold-a-T2); **régimen** y **sesión** como filtros | exit óptimo por táctica | H5, H7, H8 |
 | **R6** | **Cartera**: combinar supervivientes poco correlacionados; calibración forward; **forward-test en vivo (dry-run)** acumulando track record | señal multi-moneda + monitor | H6 |
