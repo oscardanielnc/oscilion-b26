@@ -75,7 +75,10 @@ class Config:
     # --- universo / timeframes ---
     symbols: list[str] = field(
         default_factory=lambda: _env_list(
-            "OSCILION_SYMBOLS", ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
+            "OSCILION_SYMBOLS",
+            # núcleo v1 (ver oscilion/strategies/assignment.py)
+            ["BTC/USDT:USDT", "BNB/USDT:USDT", "TRX/USDT:USDT",
+             "LINK/USDT:USDT", "DOT/USDT:USDT"],
         )
     )
     base_timeframe: str = os.getenv("OSCILION_BASE_TF", "1h")
