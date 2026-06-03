@@ -69,7 +69,7 @@ def _env_list(key: str, default: list[str]) -> list[str]:
 @dataclass(frozen=True)
 class Config:
     # versión del set de parámetros (se persiste en tabla `params`)
-    version: str = os.getenv("OSCILION_VERSION", "0.1.0-phase1")
+    version: str = os.getenv("OSCILION_VERSION", "0.3.0-phase3")
     mode: Mode = Mode(os.getenv("OSCILION_MODE", Mode.DRY_RUN.value))
 
     # --- universo / timeframes ---

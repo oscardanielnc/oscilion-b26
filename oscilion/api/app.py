@@ -50,6 +50,26 @@ def data_status() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@app.get("/candidates")
+def candidates() -> list[dict]:
+    """Última predicción + decisión por símbolo (ranking más reciente)."""
+    with db._lock:
+        rows = db.get_connection().execute(
+            """
+            SELECT p.sym, p.score, p.range_lo, p.range_hi, p.regime,
+                   p.stop, p.tp, p.rr, p.leverage, p.ts,
+                   d.action, d.reason
+            FROM predictions p
+            JOIN (SELECT sym, MAX(ts) AS mts FROM predictions GROUP BY sym) last
+              ON p.sym = last.sym AND p.ts = last.mts
+            LEFT JOIN decisions d
+              ON d.prediction_id = p.id
+            ORDER BY p.score DESC
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.get("/events")
 def events(limit: int = 50) -> list[dict]:
     limit = max(1, min(limit, 500))

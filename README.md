@@ -20,7 +20,7 @@ Descubrir el rango en el que oscila cada moneda (BTC, ETH, SOL…), entrar cerca
 
 ## Estado
 
-🟢 Fases 1-2 completas: base del sistema (infra resiliente + persistencia append-only + despliegue) y datos (OHLCV multi-TF + funding sin look-ahead, parquet+DB, reporte de calidad). Siguiente: Fase 3 (motor de análisis).
+🟢 Fases 1-3 completas: base del sistema, datos (sin look-ahead) y motor de análisis (indicadores, rangos H+diagonal, régimen, reversión Hurst/OU/VR/ADF, score 0-100, riesgo L=2%/stop y ranking de candidatos). Siguiente: Fase 4 (backtest honesto).
 
 ## Stack
 

@@ -82,4 +82,10 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
   + funding (ccxt/Binance), **sin look-ahead** (descarta vela en curso),
   parquet + DB (`ohlcv_status`), detección de huecos/dups, reporte de calidad,
   CLI `python -m oscilion.data` y endpoint `/data`. Verificado contra Binance.
-- ⬜ Fase 3 — Motor de análisis — siguiente sesión.
+- ✅ Fase 3 — Motor de análisis: `features/{indicators,reversion,ranges,regime}.py`
+  (ATR/BB/Keltner/VWAP/Donchian/ADX/RSI, Hurst/OU/VR/ADF, rango horizontal+canal
+  diagonal, clasificador rango|tendencia|caos), `scoring/conviction.py` (0-100),
+  `risk/{stops,sizing,allocation}.py` (anti-barridas, L=2%/stop, Kelly+corr) y
+  `analysis.py` (ranking + CLI `python -m oscilion.analysis`). Verificado:
+  invariante de riesgo exacta y clasificador valida OU sintético como `range`.
+- ⬜ Fase 4 — Backtest honesto — siguiente sesión.
