@@ -9,7 +9,7 @@ añadirán como sentencias idempotentes.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
@@ -74,7 +74,25 @@ TABLES: dict[str, str] = {
             fees        REAL,
             funding     REAL,
             status      TEXT    NOT NULL DEFAULT 'open',  -- open | closed
+            strategy    TEXT,                      -- ema_trend_stack | orb_breakout | ...
+            r_multiple  REAL,                      -- pnl en unidades de riesgo (R)
             created_at  INTEGER NOT NULL
+        )
+    """,
+    # Validación forward (Fase A): por (sym, strategy, scope) — el LOG conciso
+    # que responde keep/remove/fix/improve. backtest vs forward (datos no vistos).
+    "forward_results": """
+        CREATE TABLE IF NOT EXISTS forward_results (
+            sym         TEXT    NOT NULL,
+            strategy    TEXT    NOT NULL,
+            scope       TEXT    NOT NULL,          -- backtest | forward
+            n           INTEGER NOT NULL DEFAULT 0,
+            win_rate    REAL,
+            exp_r       REAL,                      -- expectativa por trade en R
+            sum_r       REAL,
+            last_entry_ts INTEGER,
+            updated_at  INTEGER NOT NULL,
+            PRIMARY KEY (sym, strategy, scope)
         )
     """,
     # Configuración usada (reproducibilidad).
@@ -135,6 +153,13 @@ TABLES: dict[str, str] = {
         )
     """,
 }
+
+# Migraciones idempotentes (ALTER) para BDs existentes. Se ejecutan ignorando
+# el error "duplicate column" si ya están aplicadas.
+MIGRATIONS: list[str] = [
+    "ALTER TABLE trades ADD COLUMN strategy TEXT",
+    "ALTER TABLE trades ADD COLUMN r_multiple REAL",
+]
 
 # Índices para consultas frecuentes (frontend / calibración).
 INDEXES: list[str] = [

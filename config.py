@@ -69,7 +69,7 @@ def _env_list(key: str, default: list[str]) -> list[str]:
 @dataclass(frozen=True)
 class Config:
     # versión del set de parámetros (se persiste en tabla `params`)
-    version: str = os.getenv("OSCILION_VERSION", "0.5.0-phase5")
+    version: str = os.getenv("OSCILION_VERSION", "0.6.0-pilot")
     mode: Mode = Mode(os.getenv("OSCILION_MODE", Mode.DRY_RUN.value))
 
     # --- universo / timeframes ---
@@ -103,6 +103,13 @@ class Config:
     # --- API ---
     api_host: str = os.getenv("OSCILION_API_HOST", "127.0.0.1")
     api_port: int = _env_int("OSCILION_API_PORT", 8787)
+
+    # --- validación forward (Fase A) ---
+    # Inicio del período "no visto" (epoch ms). Pre-deploy: holdout reciente para
+    # auto-test del pipeline; al desplegar en la VM, fijar a la fecha de despliegue.
+    forward_inception_ms: int = _env_int(
+        "OSCILION_FORWARD_INCEPTION_MS", 1767225600000  # 2026-01-01 UTC
+    )
 
     log_level: str = os.getenv("OSCILION_LOG_LEVEL", "INFO")
 

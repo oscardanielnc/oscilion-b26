@@ -125,6 +125,19 @@ Gate de cada estrategia para "sobrevivir": OOS ≥ 0.70 vs baseline · expectati
 neta de costos · calibración monótona · estable en walk-forward. Lo que no pasa, se archiva
 con evidencia (no se fuerza). Hipótesis H1–H8 detalladas en `docs/BTC_SALVAGE.md §6`.
 
+### 🏗️ Construcción del pilot v1 (dirección confirmada) — ver `docs/PROJECT_STATE.md`
+- ✅ **Paso 1 — Refactor**: estrategias como ciudadanos de primera clase (`oscilion/strategies/`),
+  mapa moneda→estrategia (`assignment.py`), `context.py` compartido backtest/live, motor honesto
+  reapuntado. Limpieza del código muerto de reversión-live.
+- ✅ **Fase A — validación forward**: `live/forward.py` (backtest vs forward por moneda×estrategia
+  → tabla `forward_results`), `live/monitor.py` (dry-run: alertas ENTRA/SAL + trades virtuales con
+  R), orquestador reapuntado, API `/forward` `/trades` `/state`, CLI `python -m oscilion.live.forward`.
+  Directiva permanente: logs concisos en BD consultables desde el frontend.
+- ⏳ **Fase B — cartera**: scaffold listo (`strategies/portfolio.py`); plan en `B_PORTFOLIO_PLAN.md`;
+  mapa de correlación v1 hecho (TRX diversifica; BTC/BNB/LINK/DOT clúster). Pendiente: params por
+  moneda, weights, leverage, límites, simulación de cartera (cuenta única).
+- ⬜ **Frontend** (React) → **Deploy v1 en VM Oracle** (fijar inception) → vigilancia diaria.
+
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
 - ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
