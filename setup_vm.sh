@@ -1,54 +1,62 @@
 #!/usr/bin/env bash
 # Oscilion — provisión inicial en la VM Oracle (ejecutar UNA vez, como root/sudo).
-# Idempotente: se puede re-correr sin romper nada.
+# Idempotente. Clona el repo, crea venv, siembra histórico, fija inception y
+# deja los servicios systemd listos.
 set -euo pipefail
 
 APP_DIR=/opt/oscilion
 APP_USER=oscilion
 ENV_FILE=/etc/oscilion.env
+REPO=${OSCILION_REPO:-https://github.com/oscardanielnc/oscilion-b26.git}
 
 echo "==> Oscilion :: setup_vm"
 
-# 1) Usuario de servicio (sin login)
+# 1) Usuario de servicio
 if ! id "$APP_USER" &>/dev/null; then
-  echo "==> Creando usuario $APP_USER"
   useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
 fi
 
-# 2) Directorio de la app
-mkdir -p "$APP_DIR"
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-
-# 3) Dependencias del sistema
+# 2) Dependencias del sistema
 if command -v apt-get &>/dev/null; then
   apt-get update -y
   apt-get install -y python3 python3-venv python3-pip git
 fi
 
-# 4) Código (clonar si está vacío)
+# 3) Código
 if [ ! -d "$APP_DIR/.git" ]; then
-  echo "==> Clona el repo en $APP_DIR antes de continuar, o ya está colocado."
+  echo "==> clonando $REPO"
+  git clone "$REPO" "$APP_DIR"
 fi
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
-# 5) Virtualenv + deps
+# 4) Virtualenv + deps
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/.venv"
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --upgrade pip
-if [ -f "$APP_DIR/requirements.txt" ]; then
-  sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+
+# 5) Env file (no sobreescribir). Fija inception del forward = AHORA (datos no vistos).
+if [ ! -f "$ENV_FILE" ]; then
+  echo "==> creando $ENV_FILE"
+  cp "$APP_DIR/example.env" "$ENV_FILE"
+  NOW_MS=$(($(date +%s) * 1000))
+  echo "OSCILION_FORWARD_INCEPTION_MS=$NOW_MS" >> "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  echo "    inception forward fijado a $NOW_MS (ahora)"
 fi
 
-# 6) Archivo de entorno (no sobreescribir si existe)
-if [ ! -f "$ENV_FILE" ]; then
-  echo "==> Creando $ENV_FILE desde example.env (EDITAR luego)"
-  cp "$APP_DIR/example.env" "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
-fi
+# 6) Semilla de histórico (para el baseline de validación forward). ~5-10 min.
+echo "==> sembrando histórico (3 años) — esto tarda unos minutos"
+sudo -u "$APP_USER" bash -c "cd $APP_DIR && set -a && . $ENV_FILE && set +a && \
+  .venv/bin/python -m oscilion.data sync --days 1095" || echo "  (si falla, re-correr: deploy luego data sync)"
 
 # 7) Servicios systemd
-echo "==> Instalando units systemd"
+echo "==> instalando units systemd"
 cp "$APP_DIR/oscilion.service" /etc/systemd/system/oscilion.service
 cp "$APP_DIR/oscilion-api.service" /etc/systemd/system/oscilion-api.service
 systemctl daemon-reload
 systemctl enable oscilion.service oscilion-api.service
+systemctl start oscilion.service oscilion-api.service
 
-echo "==> Listo. Edita $ENV_FILE y luego: ./deploy.sh"
+echo "==> LISTO. Estado:"
+systemctl is-active oscilion.service oscilion-api.service || true
+echo "    API/dashboard en http://127.0.0.1:8787 (abrir túnel SSH para verlo)"
