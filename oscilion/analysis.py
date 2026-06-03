@@ -87,7 +87,8 @@ def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 9
     atr = float(ind.atr(df).iloc[-1])
     if not np.isfinite(atr) or atr <= 0:
         return {**base, "reason": "atr inválido"}
-    regime = rg.classify_regime(df, lookback).regime
+    reg = rg.classify_regime(df, lookback)
+    regime, vol_regime = reg.regime, reg.vol_regime
 
     if last > hi:                       # ruptura alcista → long de continuación
         side, entry, stop, tp = "long", last, hi - buffer_atr * atr, last + width
@@ -103,7 +104,7 @@ def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 9
     atr_pct = atr / entry if entry else float("nan")
     return {
         **base, "score": round(score, 1), "side": side, "tradeable": math.tradeable,
-        "regime": regime, "entry": entry, "stop": stop, "tp": tp,
+        "regime": regime, "vol_regime": vol_regime, "entry": entry, "stop": stop, "tp": tp,
         "stop_pct": math.stop_pct, "profit_pct": math.profit_pct, "rr": math.rr,
         "leverage": math.leverage, "lo": lo, "hi": hi, "mid": mid,
         "position": float((last - lo) / width), "width_pct": float(width / mid),
