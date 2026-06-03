@@ -66,7 +66,11 @@ def curve() -> list[dict]:
 
 
 def main() -> None:
-    """CLI: recalcula y muestra backtest vs forward por moneda×estrategia."""
+    """CLI: muestra backtest vs forward por moneda×estrategia.
+
+    Por defecto LEE la tabla persistida (la que puebla el servicio con la inception
+    real de despliegue → coincide con el dashboard). Con --recompute recalcula al
+    vuelo (usa la inception de config; útil offline)."""
     import sys
     from oscilion.logging_setup import setup_logging
 
@@ -75,20 +79,33 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    res = refresh()
+
+    recompute = "--recompute" in sys.argv
+    if recompute:
+        refresh()
+    rows = curve()
+    if not rows:                                  # aún sin snapshot del servicio
+        refresh()
+        rows = curve()
+
+    # reshape: (sym,strategy) -> {backtest, forward}
+    by: dict[tuple, dict] = {}
+    for r in rows:
+        by.setdefault((r["sym"], r["strategy"]), {})[r["scope"]] = r
+
     print(f"\n{'MONEDA':<7}{'ESTRATEGIA':<18}{'BACKTEST (n/expR)':<22}{'FORWARD (n/expR)':<22}VEREDICTO")
     print("-" * 80)
-    for r in res:
-        bt, fw = r["backtest"], r["forward"]
-        be = f"{bt['n']}/{bt['exp_r']:+.3f}" if bt["exp_r"] is not None else f"{bt['n']}/—"
-        fe = f"{fw['n']}/{fw['exp_r']:+.3f}" if fw["exp_r"] is not None else f"{fw['n']}/—"
-        if fw["exp_r"] is None or fw["n"] < 10:
-            v = "⏳ poca muestra forward"
+    for (sym, strat), d in sorted(by.items()):
+        bt, fw = d.get("backtest", {}), d.get("forward", {})
+        be = f"{bt.get('n',0)}/{bt['exp_r']:+.3f}" if bt.get("exp_r") is not None else f"{bt.get('n',0)}/—"
+        fe = f"{fw.get('n',0)}/{fw['exp_r']:+.3f}" if fw.get("exp_r") is not None else f"{fw.get('n',0)}/—"
+        if fw.get("exp_r") is None or fw.get("n", 0) < 10:
+            v = "⏳ acumulando forward"
         elif fw["exp_r"] > 0:
             v = "✅ aguanta"
         else:
             v = "⚠️ revisar"
-        print(f"{r['sym'].split('/')[0]:<7}{r['strategy']:<18}{be:<22}{fe:<22}{v}")
+        print(f"{sym.split('/')[0]:<7}{strat:<18}{be:<22}{fe:<22}{v}")
 
 
 if __name__ == "__main__":
