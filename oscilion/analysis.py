@@ -25,10 +25,11 @@ from oscilion.persistence import db
 log = logging.getLogger(__name__)
 
 
-def analyze(sym: str, *, tf: str | None = None, lookback: int = 96) -> dict:
-    """Candidato completo para un símbolo (sin asignación de capital aún)."""
-    tf = tf or config.base_timeframe
-    df = store.load_bars(sym, tf)
+def candidate_from_df(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96) -> dict:
+    """Candidato a partir de un DataFrame de velas cerradas (fuente única de
+    la lógica de señal). Lo usan tanto `analyze` (live) como el backtest
+    (sobre ventanas, sin look-ahead). Sin asignación de capital aún.
+    """
     base = {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0, "side": None}
 
     if df.empty or len(df) < 40:
@@ -59,6 +60,16 @@ def analyze(sym: str, *, tf: str | None = None, lookback: int = 96) -> dict:
         "vol": conv["atr_pct"] if np.isfinite(conv["atr_pct"]) else 1.0,
         "components": conv["components"], "reversion": conv.get("reversion", {}),
     }
+
+
+def analyze(sym: str, *, tf: str | None = None, lookback: int = 96) -> dict:
+    """Candidato completo para un símbolo cargando su histórico (live)."""
+    tf = tf or config.base_timeframe
+    df = store.load_bars(sym, tf)
+    if df.empty or len(df) < 40:
+        return {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0,
+                "side": None, "reason": "sin datos suficientes"}
+    return candidate_from_df(sym, df, tf=tf, lookback=lookback)
 
 
 def _conv_view(conv: dict) -> dict:

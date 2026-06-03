@@ -88,4 +88,12 @@ F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──
   `risk/{stops,sizing,allocation}.py` (anti-barridas, L=2%/stop, Kelly+corr) y
   `analysis.py` (ranking + CLI `python -m oscilion.analysis`). Verificado:
   invariante de riesgo exacta y clasificador valida OU sintético como `range`.
-- ⬜ Fase 4 — Backtest honesto — siguiente sesión.
+- ✅ Fase 4 — Backtest honesto: `backtest/{costs,metrics,engine,report}.py`,
+  walk-forward event-driven SIN look-ahead (decide al cierre i, llena al open
+  i+1; intrabar conservador stop-primero), costos reales (fees maker/taker,
+  slippage, funding 8h), métricas (Sharpe, MaxDD, winrate, PF, MAE/MFE,
+  calibración) e informe go/no-go. CLI `python -m oscilion.backtest`.
+  Reusa la MISMA señal del live (`candidate_from_df`). 🚦 Veredicto inicial
+  (lógica naïve, ~120d 1h): **NO-GO** (sin confirmación de giro aún; mercado
+  en tendencia). Falta validar con histórico multi-año + giro de Fase 5.
+- ⬜ Fase 5 — Motor en vivo (incl. confirmación de giro) — siguiente sesión.

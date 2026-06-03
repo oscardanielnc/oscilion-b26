@@ -20,7 +20,7 @@ Descubrir el rango en el que oscila cada moneda (BTC, ETH, SOL…), entrar cerca
 
 ## Estado
 
-🟢 Fases 1-3 completas: base del sistema, datos (sin look-ahead) y motor de análisis (indicadores, rangos H+diagonal, régimen, reversión Hurst/OU/VR/ADF, score 0-100, riesgo L=2%/stop y ranking de candidatos). Siguiente: Fase 4 (backtest honesto).
+🟢 Fases 1-4 completas: base del sistema, datos (sin look-ahead), motor de análisis (rangos, régimen, reversión, score 0-100, riesgo L=2%/stop) y backtest honesto (walk-forward + costos reales + go/no-go). Veredicto inicial de la lógica naïve: NO-GO — falta la confirmación de giro (Fase 5) y validación multi-año. Siguiente: Fase 5 (motor en vivo).
 
 ## Stack
 

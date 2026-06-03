@@ -3,4 +3,4 @@
 Paquete principal. Ver docs/ARCHITECTURE.md para la estructura completa.
 """
 
-__version__ = "0.3.0-phase3"
+__version__ = "0.4.0-phase4"
