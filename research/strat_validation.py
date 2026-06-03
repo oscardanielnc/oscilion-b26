@@ -56,7 +56,32 @@ GRIDS = {
         "session_filter": [True, False],
         "rsi_filter": [True, False],
     },
+    "orb_breakout": {
+        "range_max_pct": [0.010, 0.015, 0.020],
+        "tp_r": [0.0, 3.0, 4.0, 6.0],            # 0 = sin TP (corre hasta SL/timeout)
+        "fresh_gate": [True, False],
+        "long_only": [True, False],
+        "session_filter": [True, False],
+    },
+    "break_retest": {
+        "vol_max_ratio": [1.0, 1.5],
+        "retest_half_atr": [0.3, 0.5],
+        "tp_r": [0.0, 2.0, 3.0],
+        "trend_filter": [True, False],
+        "long_only": [True, False],
+    },
 }
+DEFAULTS = {
+    "momentum_pullback": {"impulse_atr_min": 0.8, "pullback_max": 0.8, "tp_r": 2.0,
+                          "fresh_gate": True, "long_only": True},
+    "ema_trend_stack": {"atr_mult_sl": 1.0, "tp_r": 2.0, "fresh_gate": True,
+                        "session_filter": True, "rsi_filter": False},
+    "orb_breakout": {"range_max_pct": 0.015, "tp_r": 0.0, "fresh_gate": True,
+                     "long_only": False, "session_filter": True},
+    "break_retest": {"vol_max_ratio": 1.0, "retest_half_atr": 0.3, "tp_r": 0.0,
+                     "trend_filter": True, "long_only": False},
+}
+MAXHOLD = {"momentum_pullback": 60, "ema_trend_stack": 60, "orb_breakout": 24, "break_retest": 42}
 MIN_TRAIN = 30
 MIN_TEST = 20
 MIN_WF = 30
@@ -92,18 +117,15 @@ def _worker(args):
     if bundle is None:
         return sym, None
     configs = _grid(strategy)
+    mh = MAXHOLD[strategy]
     # correr cada config UNA vez sobre los 3 años (causal); luego cortar por fecha
     runs = []
     for cfg in configs:
-        trades = run(bundle, StratParams(strategy=strategy, params=cfg))
+        trades = run(bundle, StratParams(strategy=strategy, params=cfg, max_hold_signal_bars=mh))
         runs.append((cfg, trades))
     t_max = max((t["entry_ts"] for _c, tr in runs for t in tr), default=SPLIT + 1) + 1
 
-    # default = primer config "canónico"
-    default_cfg = {"momentum_pullback": {"impulse_atr_min": 0.8, "pullback_max": 0.8,
-                                         "tp_r": 2.0, "fresh_gate": True, "long_only": True},
-                   "ema_trend_stack": {"atr_mult_sl": 1.0, "tp_r": 2.0, "fresh_gate": True,
-                                       "session_filter": True, "rsi_filter": False}}[strategy]
+    default_cfg = DEFAULTS[strategy]
     default_trades = next((tr for c, tr in runs if c == default_cfg), [])
     def_full = _stats(default_trades)
     def_train = _stats(_sub(default_trades, 0, SPLIT))
@@ -171,8 +193,9 @@ def main():
          "_Default = params del YAML (insesgado). Sweep = mejor en TRAIN→reportado en TEST. "
          "WF = walk-forward 4 folds, config elegida por fold en su train, OOS agrupado (veredicto primario)._\n"]
 
+    strategies = sys.argv[1].split(",") if len(sys.argv) > 1 else ["ema_trend_stack", "momentum_pullback"]
     all_res = {}
-    for strategy in ("ema_trend_stack", "momentum_pullback"):
+    for strategy in strategies:
         t0 = time.time()
         print(f"[{time.strftime('%H:%M:%S')}] {strategy} ...", flush=True)
         with Pool(processes=min(len(SYMBOLS), 12)) as pool:
@@ -208,7 +231,8 @@ def main():
                  f"{', '.join(s.split('/')[0]+f' ({v},{r:+.3f},n={n})' for s,v,r,n in survivors) or 'ninguna'}._\n")
 
     md = "\n".join(L)
-    out = DATA_DIR / "reports" / "r2_strat_validation.md"
+    tag = "r2" if set(strategies) == {"ema_trend_stack", "momentum_pullback"} else "r3_" + "_".join(strategies)
+    out = DATA_DIR / "reports" / f"{tag}_strat_validation.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
