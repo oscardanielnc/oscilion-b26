@@ -139,7 +139,12 @@ con evidencia (no se fuerza). Hipótesis H1–H8 detalladas en `docs/BTC_SALVAGE
   B4: correlación (TRX diversifica). B5: **máx 3 concurrentes, 2 por clúster**. B6: cartera OOS
   **Sharpe 1.89, ret +207%, MaxDD −26%**. Config en `oscilion/strategies/tuned.py` (en uso).
   Pendiente futuro: re-tunear con más datos forward, weights dinámicos, fees maker.
-- ⬜ **Frontend** (React) → **Deploy v1 en VM Oracle** (fijar inception) → vigilancia diaria.
+- ✅ **Frontend v1** (React+Vite+TS): vistas Resumen / Señales en vivo / Validación forward;
+  servido por la API; ntfy.sh (oscar-oscilion-b26).
+- ✅ **Deploy v1 en VM Oracle** (2026-06-03): dry-run 24/7, venv python3.11 aislado, datos
+  sembrados, dashboard público en http://213.35.121.9:8787, `bash /opt/oscilion/deploy.sh`
+  de un comando. Ver `docs/DEPLOY.md` y memoria. **AHORA: vigilancia diaria del forward.**
+- ⬜ Afinar con datos forward reales · más estrategias/monedas (SOL/ETH/AVAX, VWAP) · paper/live.
 
 ### Estado actual
 - ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
