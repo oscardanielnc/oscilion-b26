@@ -10,23 +10,29 @@ Garantías de Fase 1:
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import signal
 import time
 
-from config import config
+from config import DATA_DIR, config
 from oscilion import __version__
 from oscilion.circuit_breaker import CircuitBreaker
 from oscilion.logging_setup import setup_logging
 from oscilion.notify import notify
 from oscilion.persistence import db
+from oscilion.signals.live import LiveEngine
 
 log = logging.getLogger("oscilion.orchestrator")
+
+STATE_FILE = DATA_DIR / "state.json"
 
 
 class Orchestrator:
     def __init__(self) -> None:
         self.breaker = CircuitBreaker()
+        self.engine = LiveEngine()
         self._running = False
         self._tick_count = 0
 
@@ -97,16 +103,29 @@ class Orchestrator:
 
     # ------------------------------- tick ----------------------------------
     def tick(self) -> None:
-        """Un ciclo de trabajo. Fase 1: heartbeat + snapshot vacío por símbolo.
-
-        Aquí se enchufará en orden: fetch de datos → features → scoring →
-        risk → señales → ejecución. Por ahora solo demuestra el latido y
-        que la persistencia funciona.
+        """Un ciclo del monitor en vivo (Fase 5): refresca datos, avanza la
+        máquina de estados por moneda, emite alertas y publica el estado.
+        En dry-run/paper NO opera: solo recomienda y registra.
         """
         self._tick_count += 1
-        for sym in config.symbols:
-            db.log_snapshot(sym, price=None, indicators={"phase": 1, "note": "heartbeat"})
-        log.info("tick #%d ok | %d símbolos", self._tick_count, len(config.symbols))
+        alerts = self.engine.step_all()
+        self._publish_state()
+        if alerts:
+            for a in alerts:
+                log.info("ALERTA %s", a.get("msg", a))
+        log.info("tick #%d ok | %d símbolos | %d alertas",
+                 self._tick_count, len(self.engine.symbols), len(alerts))
+
+    def _publish_state(self) -> None:
+        """Vuelca el estado de las máquinas a data/state.json (lo lee la API)."""
+        try:
+            snap = {"ts": int(time.time() * 1000), "mode": config.mode.value,
+                    "tick": self._tick_count, "symbols": self.engine.snapshot()}
+            tmp = STATE_FILE.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(snap, default=str), encoding="utf-8")
+            os.replace(tmp, STATE_FILE)
+        except Exception:
+            log.exception("No se pudo publicar state.json")
 
 
 def main() -> None:

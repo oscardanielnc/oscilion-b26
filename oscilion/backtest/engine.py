@@ -24,6 +24,7 @@ from config import config
 from oscilion.analysis import candidate_from_df
 from oscilion.backtest.costs import DEFAULT_COSTS, CostModel
 from oscilion.data import store
+from oscilion.signals.entry import confirm_turn
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class BTParams:
     warmup: int = 320                # barras para convergencia de indicadores
     max_hold_bars: int = 72          # timeout de la posición
     allow_regimes: tuple[str, ...] = ("range", "trend")  # 'chaos' nunca
+    require_confirmation: bool = False  # exigir confirmación de giro (Fase 5)
     costs: CostModel = field(default_factory=lambda: DEFAULT_COSTS)
 
 
@@ -117,8 +119,12 @@ def backtest_symbol(sym: str, tf: str | None = None, p: BTParams | None = None) 
         if pos is None and pending is None and i + 1 < n:
             window = df.iloc[i - p.warmup + 1: i + 1]
             cand = candidate_from_df(sym, window, tf=tf, lookback=p.lookback)
-            if (cand.get("tradeable") and cand.get("score", 0) >= p.min_score
-                    and cand.get("regime") in p.allow_regimes):
+            ok = (cand.get("tradeable") and cand.get("score", 0) >= p.min_score
+                  and cand.get("regime") in p.allow_regimes)
+            if ok and p.require_confirmation:
+                edge = cand.get("lo") if cand["side"] == "long" else cand.get("hi")
+                ok = confirm_turn(window, cand["side"], edge=edge)[0]
+            if ok:
                 pending = {"side": cand["side"], "stop": cand["stop"], "tp": cand["tp"],
                            "score": cand["score"], "regime": cand["regime"],
                            "rr_planned": cand["rr"], "leverage": cand["leverage"]}

@@ -5,9 +5,11 @@ llegará en Fase 6; por ahora sirve /health, /status y los últimos eventos.
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI
 
-from config import config
+from config import DATA_DIR, config
 from oscilion import __version__
 from oscilion.persistence import db
 
@@ -48,6 +50,23 @@ def data_status() -> list[dict]:
             " FROM ohlcv_status ORDER BY sym, source, tf"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@app.get("/state")
+def live_state() -> dict:
+    """Estado en vivo de la máquina por moneda (publicado por el orquestador)."""
+    f = DATA_DIR / "state.json"
+    if not f.exists():
+        return {"ts": None, "symbols": [], "note": "orquestador no ha publicado estado aún"}
+    return json.loads(f.read_text(encoding="utf-8"))
+
+
+@app.get("/calibration")
+def calibration_curve() -> list[dict]:
+    """Curva de fiabilidad forward (score predicho vs winrate real)."""
+    from oscilion.scoring.calibration import reliability_curve
+
+    return reliability_curve()
 
 
 @app.get("/candidates")
