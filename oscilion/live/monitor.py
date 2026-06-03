@@ -38,6 +38,18 @@ class _PosState:
         self.last_sig_ts = 0       # último cierre de señal procesado
         self.last_15m_ts = 0       # última vela 15m procesada para gestión
 
+    def to_dict(self) -> dict:
+        return {"position": self.position, "last_sig_ts": self.last_sig_ts,
+                "last_15m_ts": self.last_15m_ts}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "_PosState":
+        st = cls()
+        st.position = d.get("position")
+        st.last_sig_ts = int(d.get("last_sig_ts", 0) or 0)
+        st.last_15m_ts = int(d.get("last_15m_ts", 0) or 0)
+        return st
+
 
 class LiveMonitor:
     def __init__(self, *, refresh_data: bool = True, capital: float = 10_000.0,
@@ -47,8 +59,25 @@ class LiveMonitor:
         self.forward_every_ticks = forward_every_ticks      # ~cada N ticks refresca forward
         self.assignments = all_assignments()
         self.symbols = sorted({s for s, _a in self.assignments})
-        self.states = {(s, a.strategy): _PosState() for s, a in self.assignments}
         self._ticks = 0
+        # rehidratar estado persistido (sobrevive reinicios → forward-test sin huecos)
+        db.init_db()
+        saved = db.load_monitor_states()
+        self.states = {}
+        rehydrated = 0
+        for s, a in self.assignments:
+            k = self._key(s, a.strategy)
+            if k in saved:
+                self.states[(s, a.strategy)] = _PosState.from_dict(saved[k])
+                rehydrated += 1
+            else:
+                self.states[(s, a.strategy)] = _PosState()
+        if rehydrated:
+            log.info("monitor: %d series rehidratadas desde BD", rehydrated)
+
+    @staticmethod
+    def _key(sym: str, strategy: str) -> str:
+        return f"{sym}|{strategy}"
 
     # ------------------------------ datos ------------------------------
     def _refresh(self, sym: str) -> None:
@@ -76,6 +105,9 @@ class LiveMonitor:
             except Exception:
                 log.exception("monitor %s %s", sym, a.strategy)
                 db.log_event("ERROR", "live.monitor", f"{sym} {a.strategy} falló en tick")
+            finally:
+                db.save_monitor_state(self._key(sym, a.strategy),
+                                      self.states[(sym, a.strategy)].to_dict())
 
         if self.forward_every_ticks and self._ticks % self.forward_every_ticks == 1:
             try:

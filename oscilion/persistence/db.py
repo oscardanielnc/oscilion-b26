@@ -199,6 +199,35 @@ def upsert_forward_result(sym: str, strategy: str, scope: str, *, n: int,
         log.exception("Fallo upsert_forward_result %s %s %s", sym, strategy, scope)
 
 
+def save_monitor_state(key: str, state: dict) -> None:
+    """Persiste el estado de una serie del monitor (upsert)."""
+    try:
+        with _lock:
+            get_connection().execute(
+                "INSERT INTO monitor_state (key, state, updated_at) VALUES (?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET state=excluded.state, updated_at=excluded.updated_at",
+                (key, _jdump(state) or "{}", _now_ms()),
+            )
+    except Exception:
+        log.exception("Fallo save_monitor_state %s", key)
+
+
+def load_monitor_states() -> dict[str, dict]:
+    """Rehidrata el estado del monitor tras un reinicio."""
+    out: dict[str, dict] = {}
+    try:
+        with _lock:
+            rows = get_connection().execute("SELECT key, state FROM monitor_state").fetchall()
+        for r in rows:
+            try:
+                out[r["key"]] = json.loads(r["state"])
+            except Exception:
+                pass
+    except Exception:
+        log.exception("Fallo load_monitor_states")
+    return out
+
+
 def counts() -> dict[str, int]:
     """Conteo de filas por tabla (para /status del API y diagnósticos)."""
     out: dict[str, int] = {}
