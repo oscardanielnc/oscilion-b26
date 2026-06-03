@@ -53,9 +53,11 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # 6) Semilla de histórico (para el baseline de validación forward). ~5-10 min.
+# No se sourcea el env (los símbolos del núcleo son el default de config.py) → sin
+# problemas de permisos. cwd=APP_DIR para que el paquete oscilion resuelva.
 echo "==> sembrando histórico (3 años) — esto tarda unos minutos"
-sudo -u "$APP_USER" bash -c "cd $APP_DIR && set -a && . $ENV_FILE && set +a && \
-  .venv/bin/python -m oscilion.data sync --days 1095" || echo "  (si falla, re-correr: deploy luego data sync)"
+( cd "$APP_DIR" && sudo -u "$APP_USER" .venv/bin/python -m oscilion.data sync --days 1095 ) \
+  || echo "  (si falla, re-correr: cd $APP_DIR && sudo -u $APP_USER .venv/bin/python -m oscilion.data sync --days 1095)"
 
 # 7) Servicios systemd
 echo "==> instalando units systemd"
