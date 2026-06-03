@@ -8,12 +8,14 @@ from __future__ import annotations
 import json
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import DATA_DIR, config
 from oscilion import __version__
 from oscilion.persistence import db
 
 app = FastAPI(title="Oscilion API", version=__version__)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.on_event("startup")
@@ -59,6 +61,39 @@ def live_state() -> dict:
     if not f.exists():
         return {"ts": None, "symbols": [], "note": "orquestador no ha publicado estado aún"}
     return json.loads(f.read_text(encoding="utf-8"))
+
+
+@app.get("/signals")
+def signals() -> list[dict]:
+    """Señales en vivo curadas por moneda×estrategia (rango/SL/TP/dirección/RSI/checklist)."""
+    from oscilion.live.signals import live_signals
+
+    return live_signals()
+
+
+@app.get("/portfolio")
+def portfolio() -> dict:
+    """Config de cartera v1: núcleo, weights, clusters, límites."""
+    from oscilion.strategies import all_assignments
+    from oscilion.strategies import portfolio as P
+
+    series = [{"sym": s, "base": s.split("/")[0], "strategy": a.strategy,
+               "conviction": a.conviction, "weight": P.weight_of(s, a.strategy),
+               "cluster": P.cluster_of(s, a.strategy)} for s, a in all_assignments()]
+    return {"series": series, "max_concurrent": P.MAX_CONCURRENT,
+            "max_per_cluster": P.MAX_PER_CLUSTER, "tuned": P._TUNED}
+
+
+@app.get("/alerts")
+def alerts(limit: int = 40) -> list[dict]:
+    """Feed de alertas recientes (ENTRA / SAL / TOMA) del monitor."""
+    limit = max(1, min(limit, 200))
+    with db._lock:
+        rows = db.get_connection().execute(
+            "SELECT ts, level, msg FROM events WHERE module='live.monitor' "
+            "ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @app.get("/forward")
@@ -117,3 +152,13 @@ def events(limit: int = 50) -> list[dict]:
             "SELECT ts, level, module, msg FROM events ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- Frontend estático (build de frontend/dist) servido en "/" (al final, no pisa la API) ---
+from pathlib import Path  # noqa: E402
+
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _DIST.exists():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")
