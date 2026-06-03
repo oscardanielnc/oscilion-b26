@@ -22,7 +22,7 @@ from oscilion.circuit_breaker import CircuitBreaker
 from oscilion.logging_setup import setup_logging
 from oscilion.notify import notify
 from oscilion.persistence import db
-from oscilion.signals.live import LiveEngine
+from oscilion.live.monitor import LiveMonitor
 
 log = logging.getLogger("oscilion.orchestrator")
 
@@ -32,7 +32,7 @@ STATE_FILE = DATA_DIR / "state.json"
 class Orchestrator:
     def __init__(self) -> None:
         self.breaker = CircuitBreaker()
-        self.engine = LiveEngine()
+        self.engine = LiveMonitor()
         self._running = False
         self._tick_count = 0
 
@@ -108,7 +108,7 @@ class Orchestrator:
         En dry-run/paper NO opera: solo recomienda y registra.
         """
         self._tick_count += 1
-        alerts = self.engine.step_all()
+        alerts = self.engine.step()
         self._publish_state()
         if alerts:
             for a in alerts:

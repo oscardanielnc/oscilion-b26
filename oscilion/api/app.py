@@ -61,6 +61,26 @@ def live_state() -> dict:
     return json.loads(f.read_text(encoding="utf-8"))
 
 
+@app.get("/forward")
+def forward_results() -> list[dict]:
+    """Validación forward: backtest vs vivo por moneda×estrategia (Fase A)."""
+    from oscilion.live.forward import curve
+
+    return curve()
+
+
+@app.get("/trades")
+def recent_trades(limit: int = 50) -> list[dict]:
+    """Trades virtuales cerrados (con estrategia y R) — feed del frontend."""
+    limit = max(1, min(limit, 500))
+    with db._lock:
+        rows = db.get_connection().execute(
+            "SELECT ts, sym, side, strategy, entry, exit, r_multiple, pnl, status"
+            " FROM trades WHERE status='closed' ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.get("/calibration")
 def calibration_curve() -> list[dict]:
     """Curva de fiabilidad forward (score predicho vs winrate real)."""

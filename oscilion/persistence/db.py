@@ -53,6 +53,11 @@ def init_db() -> None:
     with _lock:
         for ddl in models.TABLES.values():
             conn.execute(ddl)
+        for alter in getattr(models, "MIGRATIONS", []):
+            try:
+                conn.execute(alter)
+            except Exception:
+                pass  # columna ya existe (migración idempotente)
         for idx in models.INDEXES:
             conn.execute(idx)
         conn.execute(
@@ -121,7 +126,8 @@ def log_trade(sym: str, side: str, mode: str, **f: Any) -> Optional[int]:
     f.setdefault("ts", _now_ms())
     f.update(sym=sym, side=side, mode=mode)
     allowed = {"ts", "sym", "side", "mode", "entry", "stop", "tp", "leverage",
-               "size", "exit", "exit_ts", "pnl", "fees", "funding", "status"}
+               "size", "exit", "exit_ts", "pnl", "fees", "funding", "status",
+               "strategy", "r_multiple"}
     return _insert("trades", {k: v for k, v in f.items() if k in allowed})
 
 
@@ -171,6 +177,26 @@ def update_calibration(bucket_score: int, hit: bool) -> None:
             )
     except Exception:
         log.exception("Fallo update_calibration bucket=%s", bucket_score)
+
+
+def upsert_forward_result(sym: str, strategy: str, scope: str, *, n: int,
+                          win_rate: float | None, exp_r: float | None,
+                          sum_r: float | None, last_entry_ts: int | None) -> None:
+    """Snapshot conciso de validación (backtest vs forward) por sym×strategy."""
+    try:
+        with _lock:
+            get_connection().execute(
+                "INSERT INTO forward_results"
+                " (sym, strategy, scope, n, win_rate, exp_r, sum_r, last_entry_ts, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(sym, strategy, scope) DO UPDATE SET"
+                "  n=excluded.n, win_rate=excluded.win_rate, exp_r=excluded.exp_r,"
+                "  sum_r=excluded.sum_r, last_entry_ts=excluded.last_entry_ts,"
+                "  updated_at=excluded.updated_at",
+                (sym, strategy, scope, n, win_rate, exp_r, sum_r, last_entry_ts, _now_ms()),
+            )
+    except Exception:
+        log.exception("Fallo upsert_forward_result %s %s %s", sym, strategy, scope)
 
 
 def counts() -> dict[str, int]:

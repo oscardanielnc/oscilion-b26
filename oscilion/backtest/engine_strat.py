@@ -14,14 +14,11 @@ import logging
 from dataclasses import dataclass, field
 
 import numpy as np
-import pandas as pd
 
-from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS, CostModel
-from oscilion.backtest.resample import resample_ohlcv
-from oscilion.backtest import strategies_lib as S
 from oscilion.data import store
-from oscilion.features import indicators as ind
+from oscilion.strategies import library as S
+from oscilion.strategies.context import build_ctx
 
 log = logging.getLogger(__name__)
 _H = 3_600_000
@@ -39,33 +36,6 @@ class StratParams:
     trail_atr: float = 2.0                # distancia de trailing en ATR de la señal
     be_at_r: float = 1.0                  # mover a break-even a +be_at_r·R
     params: dict = field(default_factory=dict)
-
-
-def _tf_arrays(df: pd.DataFrame) -> S.TFArrays:
-    c = df["close"]
-    return S.TFArrays(
-        ts=df["ts"].to_numpy(), open=df["open"].to_numpy(), high=df["high"].to_numpy(),
-        low=df["low"].to_numpy(), close=c.to_numpy(), volume=df["volume"].to_numpy(),
-        ema9=ind.ema(c, 9).to_numpy(), ema21=ind.ema(c, 21).to_numpy(),
-        ema50=ind.ema(c, 50).to_numpy(), atr=ind.atr(df, 14).to_numpy(),
-        rsi=ind.rsi(c, 14).to_numpy(), vwap=ind.rolling_vwap(df, 24).to_numpy(),
-    )
-
-
-def build_ctx(sym: str, strategy: str) -> S.Ctx | None:
-    spec = S.REGISTRY[strategy]
-    h1 = store.load_bars(sym, "1h")
-    if h1.empty or len(h1) < 300:
-        return None
-    sig_h = spec["signal_tf_h"]
-    sig_df = resample_ohlcv(h1, sig_h) if sig_h > 1 else h1
-    if len(sig_df) < 80:
-        return None
-    ctx = S.Ctx(sig=_tf_arrays(sig_df), sig_tf_h=sig_h)
-    for h in spec.get("aux_tfs", []):
-        aux_df = h1 if h == 1 else resample_ohlcv(h1, h)
-        ctx.aux[h] = _tf_arrays(aux_df)
-    return ctx
 
 
 @dataclass
