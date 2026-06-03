@@ -27,9 +27,9 @@ env/
 .ruff_cache/
 .ipynb_checkpoints/
 
-# Frontend (Fase 6)
+# Frontend
 frontend/node_modules/
-frontend/dist/
+# frontend/dist SÍ se versiona: la VM sirve el build sin necesitar Node.
 
 # IDE / OS
 .idea/

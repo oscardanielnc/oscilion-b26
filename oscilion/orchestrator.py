@@ -110,11 +110,15 @@ class Orchestrator:
         self._tick_count += 1
         alerts = self.engine.step()
         self._publish_state()
+        # LOGS MÍNIMOS: solo alertas (la señal) a INFO; latido rutinario a DEBUG;
+        # un heartbeat horario a INFO para saber que sigue vivo sin saturar.
         if alerts:
             for a in alerts:
                 log.info("ALERTA %s", a.get("msg", a))
-        log.info("tick #%d ok | %d símbolos | %d alertas",
-                 self._tick_count, len(self.engine.symbols), len(alerts))
+        elif self._tick_count % 60 == 0:
+            log.info("vivo · tick #%d · %d series", self._tick_count, len(self.engine.symbols))
+        else:
+            log.debug("tick #%d ok | %d alertas", self._tick_count, len(alerts))
 
     def _publish_state(self) -> None:
         """Vuelca el estado de las máquinas a data/state.json (lo lee la API)."""

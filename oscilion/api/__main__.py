@@ -11,7 +11,8 @@ def main() -> None:
         "oscilion.api.app:app",
         host=config.api_host,
         port=config.api_port,
-        log_level=config.log_level.lower(),
+        log_level="warning",   # logs mínimos: sin access-log por cada request del dashboard
+        access_log=False,
     )
 
 

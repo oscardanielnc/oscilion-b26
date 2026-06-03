@@ -81,9 +81,10 @@ class LiveMonitor:
 
     # ------------------------------ datos ------------------------------
     def _refresh(self, sym: str) -> None:
+        # solo velas recientes (la historia ya está sembrada); ligero en red.
         for tf in ("1h", "15m"):
             tf_ms = fetch.timeframe_to_ms(tf)
-            since = fetch._now_ms() - 1500 * tf_ms
+            since = fetch._now_ms() - 250 * tf_ms
             df = fetch.fetch_ohlcv(sym, tf, since=since)
             if not df.empty:
                 store.save_bars(sym, tf, df)
