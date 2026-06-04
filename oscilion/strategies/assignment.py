@@ -18,9 +18,10 @@ class Assign:
     strategy: str
     params: dict
     max_hold_signal_bars: int
-    conviction: str                 # alta | media | marginal
+    conviction: str                 # alta | media | marginal | observacion
     weight: float | None = None     # capital relativo (lo fija B; None = aún sin asignar)
     note: str = ""
+    observe_only: bool = False      # True = forward-test SIN capital (alertas+stats, weight 0)
 
 
 # config validada del pilot (entrada fija; tp_r=4 = "dejar correr ganadores")
@@ -37,6 +38,14 @@ def _orb(conv, note=""):
     return Assign("orb_breakout", dict(_ORB), 24, conv, note=note)
 
 
+# break_retest — cfg validada SOLO en TRX (R3b: WF OOS +1.45). Forward-test sin capital.
+_BRET_TRX = dict(long_only=True, retest_half_atr=0.3, tp_r=0.0, trend_filter=False, vol_max_ratio=1.0)
+
+
+def _bret_observe(note=""):
+    return Assign("break_retest", dict(_BRET_TRX), 42, "observacion", note=note, observe_only=True)
+
+
 # NÚCLEO de alta convicción (full+OOS+WF positivos)
 PORTFOLIO: dict[str, list[Assign]] = {
     # BTC: hold-10d intacto — R6 mostró que acortar destruye su edge OOS (+0.13→neg).
@@ -44,7 +53,8 @@ PORTFOLIO: dict[str, list[Assign]] = {
     # BNB/TRX: cap de cola 120h — R6: ~gratis OOS y elimina el 100% de zombies de 10d.
     "BNB/USDT:USDT":  [_ema("alta", "full+0.13/OOS+0.41; cap120h (R6 OOS+0.35)", max_hold=30)],
     "TRX/USDT:USDT":  [_ema("alta", "full+0.34/OOS+0.14; cap120h (R6 OOS+0.12)", max_hold=30),
-                       _orb("alta", "full+0.18/OOS+0.29; trend Y breakout")],
+                       _orb("alta", "full+0.18/OOS+0.29; trend Y breakout"),
+                       _bret_observe("R3b: WF OOS +1.45; forward-test SIN capital (1 de 24 → confirmar)")],
     "LINK/USDT:USDT": [_orb("alta", "ORB rescata; full+0.20/OOS+0.31")],
     "DOT/USDT:USDT":  [_orb("alta", "ORB rescata; full+0.13/OOS+0.10")],
     # marginales (en observación; pueden activarse tras afinar B / forward)

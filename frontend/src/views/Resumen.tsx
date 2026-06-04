@@ -60,7 +60,7 @@ export function Resumen({ status, signals, portfolio, alerts }:
                   <td className="muted">{STRAT[s.strategy] || s.strategy}</td>
                   <td className={s.direction === "long" ? "pos" : s.direction === "short" ? "neg" : "muted"}>{s.direction === "long" ? "▲ Long" : s.direction === "short" ? "▼ Short" : "◇ En rango"}</td>
                   <td>{s.in_trade ? "EN TRADE" : s.signal_active ? "SEÑAL ACTIVA" : "esperando"}</td>
-                  <td className="muted">{s.conviction}</td>
+                  <td className="muted">{s.observe_only ? "🔬 forward-test" : s.conviction}</td>
                 </tr>
               ))}
             </tbody>

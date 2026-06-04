@@ -141,3 +141,20 @@ Trailing (1.5/2/3 ATR) y time-stops ≤72h salieron negativos o peores → **con
 **Decisión:** BTC mantiene 240h (no tocar). **BNB y TRX → cap 120h** (`max_hold` 30 barras 4h): ~gratis en OOS y elimina el 100% de zombies de 10d (timeout 6-8% → 0%).
 
 **Bug colateral corregido:** el monitor en vivo NO aplicaba timeout (`_manage` solo cerraba por stop/tp → posición eterna). Ahora cierra a mercado al vencer el horizonte (reason `timeout`, alerta ⏱️ CIERRE_TIEMPO), consistente con el motor honesto.
+
+---
+
+## R3b — Campaña momentum_pullback + break_retest (2026-06-04)
+
+> Validar las 2 estrategias codificadas-sin-desplegar en las 12 monedas, motor honesto,
+> full + sweep(train→test) + walk-forward (veredicto primario). `research/strat_validation.py`.
+
+**`momentum_pullback` → ❌ RECHAZAR.** 12 monedas, solo 3 positivas WF y marginales (SOL +0.056,
+XRP +0.064, LTC +0.201); mediana −0.081; default full negativo en las 12. Edge ≈ ruido. No desplegar.
+
+**`break_retest` → ❌ general, ✅ TRX (candidato).** Mediana −0.161 (11/12 neg). **TRX robusto en
+TODOS los cortes:** full +0.608 · test +0.190 · sweep +0.391 · **WF +1.451 (n=67, WR 30%)**.
+Cfg: long_only · retest_half_atr=0.3 · tp_r=0 (sin TP) · trend_filter=False · vol_max_ratio=1.0.
+
+**Asterisco:** TRX = 1 de 24 combos → riesgo de comparaciones múltiples; además TRX ya carga ema+orb
+(concentración). Decisión: NO desplegar con capital aún → **forward-test** TRX break_retest antes de darle peso.
