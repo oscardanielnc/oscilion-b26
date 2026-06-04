@@ -65,6 +65,20 @@ def _env_list(key: str, default: list[str]) -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+def _default_symbols() -> list[str]:
+    """Universo = override por env, o el NÚCLEO definido en strategies/assignment
+    (fuente única; evita que config y assignment se desincronicen)."""
+    raw = os.getenv("OSCILION_SYMBOLS")
+    if raw:
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    try:
+        from oscilion.strategies.assignment import core_symbols
+        return core_symbols()
+    except Exception:
+        return ["BTC/USDT:USDT", "BNB/USDT:USDT", "TRX/USDT:USDT",
+                "LINK/USDT:USDT", "DOT/USDT:USDT"]
+
+
 # --------------------------- config -----------------------------
 @dataclass(frozen=True)
 class Config:
@@ -73,14 +87,7 @@ class Config:
     mode: Mode = Mode(os.getenv("OSCILION_MODE", Mode.DRY_RUN.value))
 
     # --- universo / timeframes ---
-    symbols: list[str] = field(
-        default_factory=lambda: _env_list(
-            "OSCILION_SYMBOLS",
-            # núcleo v1 (ver oscilion/strategies/assignment.py)
-            ["BTC/USDT:USDT", "BNB/USDT:USDT", "TRX/USDT:USDT",
-             "LINK/USDT:USDT", "DOT/USDT:USDT"],
-        )
-    )
+    symbols: list[str] = field(default_factory=_default_symbols)
     base_timeframe: str = os.getenv("OSCILION_BASE_TF", "1h")
     fast_timeframe: str = os.getenv("OSCILION_FAST_TF", "15m")
     exchange: str = os.getenv("OSCILION_EXCHANGE", "binanceusdm")

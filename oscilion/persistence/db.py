@@ -14,6 +14,7 @@ import logging
 import sqlite3
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -44,6 +45,9 @@ def get_connection() -> sqlite3.Connection:
                 _conn.execute("PRAGMA journal_mode=WAL")
                 _conn.execute("PRAGMA synchronous=NORMAL")
                 _conn.execute("PRAGMA foreign_keys=ON")
+                # API y orquestador son 2 procesos sobre la misma BD: esperar en
+                # vez de fallar con SQLITE_BUSY si coinciden escritura/lectura.
+                _conn.execute("PRAGMA busy_timeout=5000")
     return _conn
 
 
@@ -239,6 +243,27 @@ def counts() -> dict[str, int]:
             except Exception:
                 out[t] = -1
     return out
+
+
+def backup_db(keep: int = 7) -> str | None:
+    """Snapshot consistente de la BD (track record forward) a data/backups/.
+    Usa VACUUM INTO (atómico). Conserva los últimos `keep`. Devuelve la ruta."""
+    try:
+        bdir = Path(DB_PATH).parent / "backups"
+        bdir.mkdir(parents=True, exist_ok=True)
+        dest = bdir / f"oscilion-{datetime.now():%Y%m%d}.db"
+        if dest.exists():
+            dest.unlink()
+        with _lock:
+            get_connection().execute("VACUUM INTO ?", (str(dest),))
+        backups = sorted(bdir.glob("oscilion-*.db"))
+        for old in backups[:-keep]:                 # podar antiguos
+            old.unlink(missing_ok=True)
+        log.info("backup BD -> %s", dest.name)
+        return str(dest)
+    except Exception:
+        log.exception("Fallo backup_db")
+        return None
 
 
 def close() -> None:

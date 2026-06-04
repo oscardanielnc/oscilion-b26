@@ -35,6 +35,7 @@ class Orchestrator:
         self.engine = LiveMonitor()
         self._running = False
         self._tick_count = 0
+        self._last_backup_day = None
 
     # ---------------------------- ciclo de vida ----------------------------
     def startup(self) -> None:
@@ -110,6 +111,7 @@ class Orchestrator:
         self._tick_count += 1
         alerts = self.engine.step()
         self._publish_state()
+        self._daily_backup()
         # LOGS MÍNIMOS: solo alertas (la señal) a INFO; latido rutinario a DEBUG;
         # un heartbeat horario a INFO para saber que sigue vivo sin saturar.
         if alerts:
@@ -119,6 +121,13 @@ class Orchestrator:
             log.info("vivo · tick #%d · %d series", self._tick_count, len(self.engine.symbols))
         else:
             log.debug("tick #%d ok | %d alertas", self._tick_count, len(alerts))
+
+    def _daily_backup(self) -> None:
+        """Backup de la BD una vez al día (protege el track record forward)."""
+        today = time.strftime("%Y-%m-%d")
+        if today != self._last_backup_day:
+            self._last_backup_day = today
+            db.backup_db()
 
     def _publish_state(self) -> None:
         """Vuelca el estado de las máquinas a data/state.json (lo lee la API)."""
