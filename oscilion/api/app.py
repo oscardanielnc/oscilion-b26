@@ -138,14 +138,6 @@ def recent_trades(limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-@app.get("/calibration")
-def calibration_curve() -> list[dict]:
-    """Curva de fiabilidad forward (score predicho vs winrate real)."""
-    from oscilion.scoring.calibration import reliability_curve
-
-    return reliability_curve()
-
-
 @app.get("/candidates")
 def candidates() -> list[dict]:
     """Última predicción + decisión por símbolo (ranking más reciente)."""

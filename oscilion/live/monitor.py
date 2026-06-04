@@ -141,21 +141,31 @@ class LiveMonitor:
             if st.position is None:
                 cand = S.REGISTRY[a.strategy]["fn"](ctx, i, a.params)
                 if cand:
-                    alerts.append(self._open(sym, a, cand, sig_close))
+                    r = self._open(sym, a, cand, sig_close)
+                    if r:
+                        alerts.append(r)
         return alerts
 
-    def _open(self, sym: str, a, cand: dict, sig_close: int) -> dict:
-        entry = float(cand["entry_ref"])
-        stop, tp, side = cand["stop"], cand["tp"], cand["side"]
-        stop_pct = abs(entry - stop) / entry if entry else 0.0
-        pid = db.log_prediction(sym, score=a.conviction == "alta" and 80 or 60,
-                                stop=stop, tp=tp,
-                                components={"strategy": a.strategy, "side": side})
+    def _open(self, sym: str, a, cand: dict, sig_close: int) -> dict | None:
+        # MISMO método que el engine (forward): entrada taker + slippage, sizing por
+        # riesgo, fee de entrada → así los trades del monitor coinciden con la validación.
+        side = cand["side"]
+        entry = DEFAULT_COSTS.fill_price(float(cand["entry_ref"]), side, is_entry=True, maker=False)
+        stop, tp = float(cand["stop"]), float(cand["tp"])
+        risk_dist = (entry - stop) if side == "long" else (stop - entry)
+        if risk_dist <= 0:
+            return None
+        stop_pct = risk_dist / entry
+        risk_amt = self.capital * config.risk_per_trade
+        notional = risk_amt / stop_pct
+        entry_fee = DEFAULT_COSTS.fee(notional, maker=False)
+        pid = db.log_prediction(sym, score=(80 if a.conviction == "alta" else 60),
+                                stop=stop, tp=tp, components={"strategy": a.strategy, "side": side})
         db.log_decision(sym, "entrar", f"{a.strategy} {side} entry≈{entry:.6g}", prediction_id=pid)
         st = self.states[(sym, a.strategy)]
-        st.position = {"side": side, "entry": entry, "stop": stop, "tp": tp,
-                       "entry_ts": sig_close, "stop_pct": stop_pct,
-                       "strategy": a.strategy, "init_stop": stop}
+        st.position = {"side": side, "entry": entry, "stop": stop, "init_stop": stop, "tp": tp,
+                       "entry_ts": sig_close, "stop_pct": stop_pct, "notional": notional,
+                       "entry_fee": entry_fee, "risk_amt": risk_amt, "strategy": a.strategy}
         st.last_15m_ts = sig_close
         msg = (f"🟢 ENTRA {sym} {side.upper()} [{a.strategy}] @ {entry:.6g} | "
                f"stop {stop:.6g} tp {tp:.6g}")
@@ -188,22 +198,27 @@ class LiveMonitor:
 
     def _close(self, sym: str, st: _PosState, exit_px: float, exit_ts: int, reason: str) -> dict:
         pos = st.position
-        side, entry = pos["side"], pos["entry"]
-        price_ret = (exit_px - entry) / entry if side == "long" else (entry - exit_px) / entry
-        R = price_ret / pos["stop_pct"] if pos["stop_pct"] > 0 else 0.0
-        # costo aproximado en R (taker entrada+salida + slippage)
-        cost_r = (2 * DEFAULT_COSTS.taker_fee + 2 * DEFAULT_COSTS.slippage_bps / 1e4) / pos["stop_pct"]
-        R_net = R - cost_r
-        db.log_trade(sym, side, config.mode.value, entry=entry, stop=pos["init_stop"],
-                     tp=pos["tp"], exit=exit_px, exit_ts=exit_ts, status="closed",
-                     strategy=pos["strategy"], r_multiple=R_net,
-                     pnl=R_net * self.capital * config.risk_per_trade)
+        side = pos["side"]
+        maker_exit = (reason == "tp")            # TP maker, stop/timeout taker (= engine)
+        fund = 0.0
+        fdf = store.load_funding(sym)
+        if not fdf.empty:
+            m = (fdf["ts"] > pos["entry_ts"]) & (fdf["ts"] <= exit_ts)
+            if m.any():
+                fund = float(sum(DEFAULT_COSTS.funding(pos["notional"], side, r)
+                                 for r in fdf.loc[m, "funding_rate"]))
+        pnl, exit_fill = DEFAULT_COSTS.realized(side, pos["entry"], exit_px, pos["notional"],
+                                                pos["entry_fee"], maker_exit=maker_exit, funding_total=fund)
+        R = pnl / pos["risk_amt"] if pos["risk_amt"] > 0 else 0.0
+        db.log_trade(sym, side, config.mode.value, entry=pos["entry"], stop=pos["init_stop"],
+                     tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=pos["notional"],
+                     strategy=pos["strategy"], r_multiple=R, pnl=pnl, funding=fund)
         kind = "SAL" if reason == "stop" else "TOMA_GANANCIA"
         icon = "🔴" if reason == "stop" else "🟢"
-        msg = f"{icon} {kind} {sym} [{pos['strategy']}] @ {exit_px:.6g} | {R_net:+.2f}R ({reason})"
+        msg = f"{icon} {kind} {sym} [{pos['strategy']}] @ {exit_fill:.6g} | {R:+.2f}R ({reason})"
         notify(msg, "INFO", "live.monitor")
         st.position = None
-        return {"kind": kind, "sym": sym, "strategy": pos["strategy"], "msg": msg, "R": R_net}
+        return {"kind": kind, "sym": sym, "strategy": pos["strategy"], "msg": msg, "R": R}
 
     # ----------------------------- estado ------------------------------
     def snapshot(self) -> list[dict]:

@@ -37,5 +37,15 @@ class CostModel:
         sign = 1.0 if side == "long" else -1.0
         return abs(notional) * rate * sign
 
+    def realized(self, side: str, entry: float, exit_px: float, notional: float,
+                 entry_fee: float, *, maker_exit: bool, funding_total: float = 0.0):
+        """PnL neto de un trade cerrado (FUENTE ÚNICA usada por engine y monitor):
+        fill de salida (slippage si taker) + fees ambos lados + funding.
+        Devuelve (pnl, exit_fill)."""
+        exit_fill = self.fill_price(exit_px, side, is_entry=False, maker=maker_exit)
+        price_ret = (exit_fill - entry) / entry if side == "long" else (entry - exit_fill) / entry
+        pnl = price_ret * notional - (entry_fee + self.fee(notional, maker=maker_exit)) - funding_total
+        return pnl, exit_fill
+
 
 DEFAULT_COSTS = CostModel()
