@@ -23,6 +23,11 @@ def main() -> None:
     s.add_argument("--days", type=int, default=365)
     s.add_argument("--symbols", type=str, default="")
 
+    b = sub.add_parser("backfill", help="sembrar histórico SOLO a monedas nuevas (idempotente)")
+    b.add_argument("--min-bars", type=int, default=1500)
+    b.add_argument("--days", type=int, default=1200)
+    b.add_argument("--symbols", type=str, default="")
+
     sub.add_parser("report", help="reporte de calidad")
 
     u = sub.add_parser("universe", help="descubrir universo por liquidez")
@@ -37,6 +42,17 @@ def main() -> None:
             print(f"  {r['sym']:<18} {r['tf']:<5} filas={r['rows']:<6} "
                   f"+{r['added']:<5} huecos={r['gaps']} dups={r['dupes']}")
         print("\n" + pipeline.quality_report_md())
+
+    elif args.cmd == "backfill":
+        symbols = [x.strip() for x in args.symbols.split(",") if x.strip()] or config.symbols
+        results = pipeline.backfill_missing(symbols, min_bars=args.min_bars, days=args.days)
+        for r in results:
+            if r["action"] == "seed":
+                print(f"  {r['sym']:<18} SEMBRADA  1h: {r['bars_1h_before']} → {r['bars_1h']}")
+            else:
+                print(f"  {r['sym']:<18} ok ({r['bars_1h']} velas 1h)")
+        seeded = sum(1 for r in results if r["action"] == "seed")
+        print(f"\n  {seeded} sembrada(s), {len(results)-seeded} ya OK.")
 
     elif args.cmd == "report":
         print(pipeline.quality_report_md())

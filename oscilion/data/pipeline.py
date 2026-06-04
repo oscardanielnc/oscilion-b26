@@ -56,6 +56,35 @@ def sync_all(
     return results
 
 
+def backfill_missing(
+    symbols: list[str] | None = None, *, min_bars: int = 1500, days: int = 1200,
+    timeframes: list[str] | None = None,
+) -> list[dict]:
+    """Siembra histórico SOLO a los símbolos por debajo de `min_bars` velas 1h.
+
+    Idempotente: monedas ya sembradas se saltan (deploy rápido). Pensado para que,
+    al añadir monedas nuevas al núcleo, el deploy las backfillee automáticamente sin
+    que queden 'oscuras' (build_ctx live exige ≥300 velas 1h; usa tail 1500).
+    """
+    symbols = symbols or config.symbols
+    timeframes = timeframes or [config.base_timeframe, config.fast_timeframe]
+    db.init_db()
+    out: list[dict] = []
+    for sym in symbols:
+        before = len(store.load_bars(sym, "1h"))
+        if before >= min_bars:
+            out.append({"sym": sym, "action": "skip", "bars_1h": before})
+            continue
+        log.info("backfill %s (1h=%d < %d) → %d días", sym, before, min_bars, days)
+        sync_symbol(sym, timeframes=timeframes, days=days)
+        after = len(store.load_bars(sym, "1h"))
+        out.append({"sym": sym, "action": "seed", "bars_1h_before": before, "bars_1h": after})
+    seeded = [r for r in out if r["action"] == "seed"]
+    db.log_event("INFO", "data.pipeline",
+                 f"backfill: {len(seeded)} sembradas de {len(symbols)} símbolos")
+    return out
+
+
 def _fmt_ts(ms: int | None) -> str:
     if not ms:
         return "—"

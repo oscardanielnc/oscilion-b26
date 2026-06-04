@@ -52,9 +52,19 @@ Tras hacer push de cambios desde tu PC, en la VM desde **cualquier** directorio:
 ```bash
 bash /opt/oscilion/deploy.sh
 ```
-Hace todo: `git pull` → dependencias → verificación de import → reinicia `oscilion`
-y `oscilion-api` → resumen de estado. No requiere `sudo` (lo usa internamente solo
-para systemctl). Si el import falla, **aborta sin reiniciar** (no despliega algo roto).
+Hace todo: `git pull` → dependencias → verificación de import → **backfill de monedas
+nuevas** → reinicia `oscilion` y `oscilion-api` → resumen de estado. No requiere `sudo`
+(lo usa internamente solo para systemctl). Si el import falla, **aborta sin reiniciar**.
+
+> **Backfill automático e idempotente:** al añadir monedas nuevas al núcleo
+> (`assignment.py`), el deploy las siembra solas (`python -m oscilion.data backfill`):
+> baja histórico completo SOLO a las que están por debajo de 1500 velas 1h y salta las ya
+> sembradas (deploy rápido). Evita que una moneda nueva arranque "oscura" (build_ctx exige
+> ≥300 velas 1h). Forzar manual: `… -m oscilion.data backfill`.
+>
+> **Frontend:** el dashboard se sirve desde `frontend/dist` **commiteado** (la VM no compila).
+> Si cambias `frontend/src`, reconstruye y commitea el `dist` ANTES de desplegar:
+> `cd frontend && npm run build` (en tu PC) → `git add frontend/dist && git commit`.
 
 ## 6. Revisión diaria (logs MÍNIMOS para compartir)
 Para que me los pases sin saturar, comparte cualquiera de estos (son concisos):

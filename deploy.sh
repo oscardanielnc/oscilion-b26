@@ -31,7 +31,7 @@ echo "[2/5] Dependencias Python..."
 echo "  ✓ Dependencias OK"
 
 echo ""
-echo "[3/5] Verificación rápida (import del paquete)..."
+echo "[3/6] Verificación rápida (import del paquete)..."
 if "${ASU[@]}" "$PY" -c "import config; from oscilion import orchestrator; from oscilion.live import monitor, forward, signals; from oscilion.data import fetch; from oscilion.strategies import all_assignments; from oscilion.api import app" 2>/dev/null; then
     echo "  ✓ Paquete importa correctamente"
 else
@@ -39,14 +39,22 @@ else
 fi
 
 echo ""
-echo "[4/5] Reiniciando orquestador (oscilion)..."
+echo "[4/6] Backfill de monedas nuevas (idempotente; salta las ya sembradas)..."
+if "${ASU[@]}" "$PY" -m oscilion.data backfill; then
+    echo "  ✓ Histórico listo para todo el núcleo"
+else
+    echo "  ✗ Backfill falló — abortando (no se reinicia: evita arrancar con monedas oscuras)"; exit 1
+fi
+
+echo ""
+echo "[5/6] Reiniciando orquestador (oscilion)..."
 sudo systemctl restart oscilion && sleep 2
 [ "$(systemctl is-active oscilion 2>/dev/null)" = "active" ] \
     && echo "  ✓ oscilion activo" \
     || { echo "  ✗ oscilion no arrancó — journalctl -u oscilion -n 30"; }
 
 echo ""
-echo "[5/5] Reiniciando dashboard (oscilion-api)..."
+echo "[6/6] Reiniciando dashboard (oscilion-api)..."
 sudo systemctl restart oscilion-api && sleep 2
 [ "$(systemctl is-active oscilion-api 2>/dev/null)" = "active" ] \
     && echo "  ✓ oscilion-api activo  →  Dashboard: túnel SSH a 127.0.0.1:8787" \
