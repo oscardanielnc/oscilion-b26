@@ -30,6 +30,8 @@ header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-
   background: var(--panel2); color: var(--muted); letter-spacing: .3px; white-space: nowrap; }
 .badge.long { color: var(--green); border-color: #23503a; }
 .badge.short { color: var(--red); border-color: #5a2730; }
+.badge.neutral { color: var(--muted); }
+.badge.neutral small { opacity: .7; }
 .badge.alta { color: var(--blue); border-color: #2a3f63; }
 .badge.horizon { color: #9fb4d4; }
 .badge.multi { color: var(--amber); border-color: #4a3f1a; }

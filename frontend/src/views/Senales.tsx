@@ -6,6 +6,16 @@ const STRAT_LABEL: Record<string, string> = {
   orb_breakout: "Ruptura de rango · ORB",
 };
 
+function DirBadge({ s }: { s: Signal }) {
+  // Sin ruptura (neutral): no hay dirección comprometida → mostramos "en rango"
+  // con el sesgo del borde más cercano, sin parpadear como señal real.
+  if (s.direction === "neutral") {
+    const b = s.bias === "long" ? "▲" : "▼";
+    return <span className="badge neutral">◇ En rango <small>({b} sesgo)</small></span>;
+  }
+  return <span className={"badge " + s.direction}>{s.direction === "long" ? "▲ Long" : "▼ Short"}</span>;
+}
+
 function StateBadge({ s }: { s: Signal }) {
   const cls = s.in_trade ? "entrade" : s.signal_active ? "activa" : "esperando";
   const label = s.in_trade ? "EN TRADE" : s.signal_active ? "SEÑAL ACTIVA" : "ESPERANDO";
@@ -17,7 +27,7 @@ function StrategyBlock({ s }: { s: Signal }) {
     <div className="strat">
       <div className="strat-head">
         <span className="strat-name">{STRAT_LABEL[s.strategy] || s.strategy}</span>
-        <span className={"badge " + s.direction}>{s.direction === "long" ? "▲ Long" : "▼ Short"}</span>
+        <DirBadge s={s} />
         <span className="badge horizon">{s.horizon}</span>
         <StateBadge s={s} />
       </div>
