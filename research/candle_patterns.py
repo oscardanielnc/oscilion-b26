@@ -39,10 +39,12 @@ from oscilion.features import indicators as ind
 
 SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "BNB/USDT:USDT",
            "XRP/USDT:USDT", "ADA/USDT:USDT", "DOGE/USDT:USDT", "AVAX/USDT:USDT",
-           "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT"]
+           "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT",
+           "SUI/USDT:USDT"]      # SUI: fuerte en Sentinel (verificar)
 
-K_ATR = 1.0      # barreras ±1 ATR
-H = 24           # horizonte: 24 barras 1h = 1 día
+K_ATR = 1.0                      # barreras ±1 ATR
+TF = sys.argv[1] if len(sys.argv) > 1 else "1h"
+H = {"1h": 24, "15m": 96}.get(TF, 24)    # horizonte ≈ 24h real en ambos TF
 
 
 # ----------------------------- detectores ------------------------------
@@ -78,12 +80,12 @@ def detect(o, h, l, c):
     return bull, bear
 
 
-def barrier_outcome(side, entry, atr_i, h, l, c, i, n):
-    """1 si toca primero la barrera A FAVOR del patrón en i+1..i+H; 0 si en contra;
-    si ninguna, por el signo del cierre a H. side: +1 alcista, -1 bajista."""
+def barrier_outcome(side, entry, atr_i, h, l, c, i, n, hh):
+    """1 si toca primero la barrera A FAVOR del patrón en i+1..i+hh; 0 si en contra;
+    si ninguna, por el signo del cierre a hh. side: +1 alcista, -1 bajista."""
     up = entry + K_ATR * atr_i
     dn = entry - K_ATR * atr_i
-    end = min(i + H, n - 1)
+    end = min(i + hh, n - 1)
     for k in range(i + 1, end + 1):
         hit_up = h[k] >= up
         hit_dn = l[k] <= dn
@@ -98,8 +100,9 @@ def barrier_outcome(side, entry, atr_i, h, l, c, i, n):
 
 
 # ------------------------------- worker --------------------------------
-def _worker(sym):
-    df = store.load_bars(sym, "1h")
+def _worker(args):
+    sym, tf, hh = args
+    df = store.load_bars(sym, tf)
     if df.empty or len(df) < 300:
         return sym, None
     o = df["open"].to_numpy(); h = df["high"].to_numpy()
@@ -133,7 +136,7 @@ def _worker(sym):
         if not np.isfinite(atr[i]) or atr[i] <= 0 or not np.isfinite(ema50[i]):
             continue
         side = 1 if bull[i] else -1
-        out = barrier_outcome(side, c[i], atr[i], h, l, c, i, n)
+        out = barrier_outcome(side, c[i], atr[i], h, l, c, i, n, hh)
         agg["n"] += 1; agg["correct"] += out
 
         # estados de confirmación (sin look-ahead)
@@ -175,17 +178,18 @@ def main():
     except Exception:
         pass
     t0 = time.time()
+    tasks = [(s, TF, H) for s in SYMBOLS]
     with Pool(processes=min(len(SYMBOLS), 12)) as pool:
-        res = dict(pool.map(_worker, SYMBOLS))
+        res = dict(pool.map(_worker, tasks))
     dt = time.time() - t0
 
     rows = [(s, r) for s, r in res.items() if r]
     INDS = rows[0][1]["INDS"]
 
     # ---- Parte 1: respeto por moneda + correlación con volatilidad ----
-    L = ["# 🕯️ R7 — Patrones de vela: ¿quién los respeta y qué los confirma?",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · 12 monedas · 3 años · 1h · "
-         f"barreras ±{K_ATR}·ATR, H={H}h · {dt:.0f}s_\n",
+    L = [f"# 🕯️ R7 — Patrones de vela ({TF}): ¿quién los respeta y qué los confirma?",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · {len(rows)} monedas · {TF} · "
+         f"barreras ±{K_ATR}·ATR, H={H} barras · {dt:.0f}s_\n",
          "## Parte 1 — Respeto por moneda (P(dirección correcta); baseline≈50%)",
          "| Moneda | n patrones | **P(correcta)** | lift vs 50% | volatilidad (ATR% mediana) |",
          "|---|--:|--:|--:|--:|"]
@@ -235,7 +239,7 @@ def main():
     L.append(f"\n_Top confirmadores: {best}._")
 
     md = "\n".join(L)
-    out = DATA_DIR / "reports" / "r7_candle_patterns.md"
+    out = DATA_DIR / "reports" / f"r7_candle_patterns_{TF}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print(md)
