@@ -158,3 +158,29 @@ Cfg: long_only · retest_half_atr=0.3 · tp_r=0 (sin TP) · trend_filter=False �
 
 **Asterisco:** TRX = 1 de 24 combos → riesgo de comparaciones múltiples; además TRX ya carga ema+orb
 (concentración). Decisión: NO desplegar con capital aún → **forward-test** TRX break_retest antes de darle peso.
+
+---
+
+## R3c — Validación vwap_anchor (2026-06-04)
+
+> Portado fiel de sentinel (VWAP Anchor v2, LONG-only). Gate de entrada = C1 (price>VWAP 1h)
+> ∧ C2 (price>VWAP 4h) ∧ O1 (frescura EMA9<EMA21 1h). C3 (EMA50 4h) opcional. SL=k·ATR1h, TP=tp_r·R.
+> signal_tf=1h, aux=4h, max_hold=120 (5d). `research/strat_validation.py vwap_anchor`.
+
+**Veredicto: ✅ EDGE GENERALIZABLE (el mejor de los 3 portados).** 12 monedas, **6 positivas WF OOS**,
+mediana equiponderada **+0.069** (positiva, vs −0.08/−0.16 de momentum/break_retest).
+
+| Superviviente | V | full | TEST | WF OOS (n) |
+|---|:--:|---:|---:|---:|
+| TRX | ✅ | +0.220 | +0.318 | **+0.877** (72) |
+| ETH | ✅ | +0.023 | +0.111 | **+0.173** (90) |
+| AVAX | ✅ | +0.171 | +0.104 | **+0.154** (68) |
+| BTC | 🟡 | +0.035 | −0.014 | +0.608 (43) |
+| XRP | 🟡 | −0.106 | −0.249 | +0.200 (110) |
+| DOGE | 🟡 | −0.068 | −0.234 | +0.697 (36) |
+
+**Más confiables = ✅ trío (ETH, AVAX, TRX):** positivos en full+test+WF a la vez. Los 🟡 (BTC/XRP/DOGE)
+tienen full o test negativo → WF positivo huele a suerte de fold; tratar como observación.
+
+**Caveats:** WR bajo (12-37%) → cola gorda, depende de pocos ganadores grandes; los WF eligen casi siempre
+**tp_r=0** (sin TP, deja correr) — coherente con #9. n OOS modesto (36-110). Confianza moderada-positiva.

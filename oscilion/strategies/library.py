@@ -183,6 +183,47 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
     return {"side": side, "entry_ref": price, "stop": float(stop), "tp": float(tp)}
 
 
+# ------------------------------- VWAP ANCHOR ---------------------------------
+def vwap_anchor(ctx: Ctx, i: int, p: dict) -> dict | None:
+    """VWAP Anchor v2 (portado de sentinel) — régimen VWAP multi-TF, LONG-only.
+
+    Gate de ENTRADA (lo que decide disparar): C1 ∧ C2 ∧ O1_gate.
+      C1: precio > VWAP 1h (24 barras)   C2: precio > VWAP 4h (24 barras)
+      O1: frescura — skip si EMA9_1h > EMA21_1h (ya confirmó, entrada tardía)
+    C3 (price > EMA50 4h) es opcional (trend_filter): en v2 sólo subía 'stars', no gateaba.
+    SL = sl_atr_mult · ATR 1h. TP = tp_r · riesgo (v2: 2.0/2.5).
+    """
+    s = ctx.sig                                  # 1h
+    if i < 30 or not np.isfinite(s.atr[i]) or s.atr[i] <= 0 or not np.isfinite(s.vwap[i]):
+        return None
+    price = float(s.close[i])
+    if not (price > s.vwap[i]):                  # C1
+        return None
+    T = int(s.ts[i]) + ctx.sig_tf_h * _H
+    k = aux_at(ctx, 4, T)                         # 4h cerrado ≤ T
+    if k is None or not np.isfinite(ctx.aux[4].vwap[k]):
+        return None
+    if not (price > ctx.aux[4].vwap[k]):         # C2
+        return None
+    if p.get("fresh_gate", True) and s.ema9[i] > s.ema21[i]:   # O1_gate
+        return None
+    if p.get("trend_filter", False):             # C3 opcional
+        e50 = ctx.aux[4].ema50[k]
+        if not np.isfinite(e50) or not (price > e50):
+            return None
+    if p.get("session_filter", False):           # v2 no usa sesión (off por defecto)
+        if (T // _H) % 24 not in (8, 12, 16, 20):
+            return None
+    atr = s.atr[i]
+    stop = price - p.get("sl_atr_mult", 2.0) * atr
+    risk = price - stop
+    if risk <= 0:
+        return None
+    tp_r = p.get("tp_r", 2.5)
+    tp = (price + tp_r * risk) if tp_r > 0 else 1e18      # 0 = sin TP (corre a SL/timeout)
+    return {"side": "long", "entry_ref": price, "stop": float(stop), "tp": float(tp)}
+
+
 # ------------------------------ BREAK + RETEST -------------------------------
 def break_retest(ctx: Ctx, i: int, p: dict) -> dict | None:
     s = ctx.sig                                  # 4h
@@ -232,5 +273,6 @@ REGISTRY = {
     "momentum_pullback": {"fn": momentum_pullback, "signal_tf_h": 2, "aux_tfs": []},
     "ema_trend_stack": {"fn": ema_trend_stack, "signal_tf_h": 4, "aux_tfs": [1]},
     "orb_breakout": {"fn": orb_breakout, "signal_tf_h": 1, "aux_tfs": [4]},
+    "vwap_anchor": {"fn": vwap_anchor, "signal_tf_h": 1, "aux_tfs": [4]},
     "break_retest": {"fn": break_retest, "signal_tf_h": 4, "aux_tfs": []},
 }
