@@ -1,8 +1,32 @@
-import { Status, Signal, Portfolio, Alert } from "../api";
-import { timeLima } from "../util";
+import { useState } from "react";
+import { Status, Signal, Portfolio, Alert, exportUrl } from "../api";
+import { timeLima, todayLima } from "../util";
 
 function Stat({ k, v }: { k: string; v: string }) {
   return <div className="card stat"><div className="k">{k}</div><div className="v">{v}</div></div>;
+}
+
+function ExportLogs() {
+  const [from, setFrom] = useState(todayLima());
+  const [to, setTo] = useState(todayLima());
+  const dl = (fmt: "md" | "json") => {
+    const a = document.createElement("a");
+    a.href = exportUrl(from, to, fmt);
+    a.download = `oscilion_logs_${from}_${to}.${fmt}`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  return (
+    <div className="card export">
+      <div className="section-title">Descargar logs (revisión diaria)</div>
+      <div className="export-row">
+        <label>Desde<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label>Hasta<input type="date" value={to} min={from} max={todayLima()} onChange={(e) => setTo(e.target.value)} /></label>
+        <button className="btn" onClick={() => dl("md")}>⬇ Descargar .md</button>
+        <button className="btn ghost" onClick={() => dl("json")}>.json</button>
+      </div>
+      <div className="muted small">Incluye: sistema · validación forward · trades · alertas · errores. Rango por defecto: hoy.</div>
+    </div>
+  );
 }
 
 const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB" };
@@ -14,6 +38,8 @@ export function Resumen({ status, signals, portfolio, alerts }:
 
   return (
     <>
+      <ExportLogs />
+
       <div className="grid stats">
         <Stat k="Series del núcleo" v={String(signals.length)} />
         <Stat k="En trade" v={String(inTrade.length)} />

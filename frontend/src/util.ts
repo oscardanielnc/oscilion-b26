@@ -10,3 +10,10 @@ export const cls = (n: number | null | undefined): string =>
 export const timeLima = (ms: number): string =>
   new Date(ms).toLocaleString("es-PE", { timeZone: "America/Lima", hour12: false,
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+// fecha de HOY en Lima como YYYY-MM-DD (para los inputs date)
+export const todayLima = (): string => {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima",
+    year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return p; // en-CA → YYYY-MM-DD
+};
