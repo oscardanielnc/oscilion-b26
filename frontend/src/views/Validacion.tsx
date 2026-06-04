@@ -1,7 +1,7 @@
 import { Forward } from "../api";
 import { fmt, cls } from "../util";
 
-const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB" };
+const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB", vwap_anchor: "VWAP anchor", break_retest: "Break+Retest" };
 
 // agrupa por sym+strategy con sus dos scopes
 function rows(forward: Forward[]) {

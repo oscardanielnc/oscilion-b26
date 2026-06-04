@@ -107,6 +107,42 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
     }
 
 
+def _vwap_view(ctx, i, a, price, atr) -> dict:
+    """Vista de vwap_anchor: VWAP 1h/4h, frescura, SL/TP y checklist real (C1/C2/O1)."""
+    s = ctx.sig
+    vwap1 = float(s.vwap[i]) if np.isfinite(s.vwap[i]) else None
+    T = int(s.ts[i]) + ctx.sig_tf_h * _H
+    k = S.aux_at(ctx, 4, T)
+    vwap4 = float(ctx.aux[4].vwap[k]) if (k is not None and np.isfinite(ctx.aux[4].vwap[k])) else None
+    ema50_4h = float(ctx.aux[4].ema50[k]) if (k is not None and np.isfinite(ctx.aux[4].ema50[k])) else None
+    fresh_ok = not (s.ema9[i] > s.ema21[i])
+    c1 = vwap1 is not None and price > vwap1
+    c2 = vwap4 is not None and price > vwap4
+    direction = "long" if (c1 and c2 and fresh_ok) else "neutral"
+    stop = price - a.params.get("sl_atr_mult", 2.0) * atr
+    risk = price - stop
+    tp_r = a.params.get("tp_r", 2.5)
+    tp = price + tp_r * risk if tp_r else price
+    checklist = [
+        {"label": "Precio > VWAP 1h", "ok": bool(c1)},
+        {"label": "Precio > VWAP 4h", "ok": bool(c2)},
+        {"label": "Frescura (EMA9<EMA21 1h)", "ok": bool(fresh_ok)},
+    ]
+    return {
+        "direction": direction, "bias": "long",
+        "entry": round(price, 6), "stop": round(stop, 6),
+        "tp": round(tp, 6) if tp_r else "sin TP",
+        "stop_pct": round(risk / price * 100, 2) if price else None,
+        "tp_pct": round((tp - price) / price * 100, 2) if (price and tp_r) else None,
+        "rr": tp_r if tp_r else "sin TP",
+        "levels": {"VWAP_1h": round(vwap1, 6) if vwap1 else None,
+                   "VWAP_4h": round(vwap4, 6) if vwap4 else None,
+                   "EMA50_4h": round(ema50_4h, 6) if ema50_4h else None},
+        "indicators": {},
+        "checklist": checklist,
+    }
+
+
 def _generic_view(a, price, cand) -> dict:
     """Vista honesta para estrategias sin vista dedicada (p.ej. break_retest en
     forward-test): refleja el candidato REAL si existe, sin inventar niveles ajenos."""
@@ -150,6 +186,8 @@ def live_signals() -> list[dict]:
             view = _ema_view(ctx, i, a, price, atr)
         elif a.strategy == "orb_breakout":
             view = _orb_view(ctx, i, a, price, atr)
+        elif a.strategy == "vwap_anchor":
+            view = _vwap_view(ctx, i, a, price, atr)
         else:
             view = _generic_view(a, price, cand)        # break_retest u otras en forward-test
         st = states.get(f"{sym}|{a.strategy}", {})

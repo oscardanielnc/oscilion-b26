@@ -46,17 +46,36 @@ def _bret_observe(note=""):
     return Assign("break_retest", dict(_BRET_TRX), 42, "observacion", note=note, observe_only=True)
 
 
+# vwap_anchor — config BASELINE (no los ganadores por-fold del WF: eso sobreajusta).
+# R3c: edge generalizable (6/12 WF+, mediana +0.069). max_hold 120 (1h) = 5d.
+_VWAP = dict(sl_atr_mult=2.0, tp_r=2.5, fresh_gate=True, trend_filter=False, session_filter=False)
+
+
+def _vwap(conv, note="", observe=False):
+    return Assign("vwap_anchor", dict(_VWAP), 120,
+                  "observacion" if observe else conv, note=note, observe_only=observe)
+
+
 # NÚCLEO de alta convicción (full+OOS+WF positivos)
 PORTFOLIO: dict[str, list[Assign]] = {
     # BTC: hold-10d intacto — R6 mostró que acortar destruye su edge OOS (+0.13→neg).
-    "BTC/USDT:USDT":  [_ema("alta", "trender limpio; full+0.34/OOS+0.13; hold-10d (R6: no acortar)")],
+    "BTC/USDT:USDT":  [_ema("alta", "trender limpio; full+0.34/OOS+0.13; hold-10d (R6: no acortar)"),
+                       _vwap("alta", observe=True, note="R3c 🟡 WF+0.61 (test neg) → forward-test")],
     # BNB/TRX: cap de cola 120h — R6: ~gratis OOS y elimina el 100% de zombies de 10d.
     "BNB/USDT:USDT":  [_ema("alta", "full+0.13/OOS+0.41; cap120h (R6 OOS+0.35)", max_hold=30)],
     "TRX/USDT:USDT":  [_ema("alta", "full+0.34/OOS+0.14; cap120h (R6 OOS+0.12)", max_hold=30),
                        _orb("alta", "full+0.18/OOS+0.29; trend Y breakout"),
-                       _bret_observe("R3b: WF OOS +1.45; forward-test SIN capital (1 de 24 → confirmar)")],
+                       _bret_observe("R3b: WF OOS +1.45; forward-test SIN capital (1 de 24 → confirmar)"),
+                       _vwap("alta", observe=True,
+                             note="R3c: WF+0.88 ✅ pero TRX ya carga 3 estrategias → forward-test")],
     "LINK/USDT:USDT": [_orb("alta", "ORB rescata; full+0.20/OOS+0.31")],
     "DOT/USDT:USDT":  [_orb("alta", "ORB rescata; full+0.13/OOS+0.10")],
+    # vwap_anchor (R3c): ✅ con capital en monedas nuevas que diversifican (full+test+WF +).
+    "ETH/USDT:USDT":  [_vwap("media", "R3c: full+0.02/test+0.11/WF+0.17 ✅; nueva, diversifica")],
+    "AVAX/USDT:USDT": [_vwap("media", "R3c: full+0.17/test+0.10/WF+0.15 ✅; nueva, diversifica")],
+    # vwap_anchor 🟡 (full o test negativo → WF posible suerte de fold): forward-test sin capital.
+    "XRP/USDT:USDT":  [_vwap("media", observe=True, note="R3c 🟡 WF+0.20 (full/test neg) → forward-test")],
+    "DOGE/USDT:USDT": [_vwap("media", observe=True, note="R3c 🟡 WF+0.70 n=36 (full/test neg) → forward-test")],
     # marginales (en observación; pueden activarse tras afinar B / forward)
     # "ADA/USDT:USDT":  [_orb("marginal")],
     # "DOGE/USDT:USDT": [_orb("marginal")],

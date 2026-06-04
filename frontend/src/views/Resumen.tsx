@@ -29,7 +29,7 @@ function ExportLogs() {
   );
 }
 
-const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB" };
+const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB", vwap_anchor: "VWAP anchor", break_retest: "Break+Retest" };
 
 export function Resumen({ status, signals, portfolio, alerts }:
   { status: Status; signals: Signal[]; portfolio: Portfolio | null; alerts: Alert[] }) {

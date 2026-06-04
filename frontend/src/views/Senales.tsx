@@ -4,6 +4,8 @@ import { fmt, pct } from "../util";
 const STRAT_LABEL: Record<string, string> = {
   ema_trend_stack: "Tendencia · EMA stack",
   orb_breakout: "Ruptura de rango · ORB",
+  vwap_anchor: "Tendencia · VWAP anchor",
+  break_retest: "Continuación · Break+Retest",
 };
 
 function DirBadge({ s }: { s: Signal }) {
