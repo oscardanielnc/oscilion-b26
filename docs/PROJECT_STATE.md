@@ -91,12 +91,26 @@ python -m oscilion.data sync --days 1095   # refrescar histórico
 
 ---
 
-## 5. Pendiente (en orden)
-1. **Fase B — cartera** (ver `B_PORTFOLIO_PLAN.md`): mejores params por moneda, capital por
-   moneda, multiplicadores de apalancamiento, mapa de correlación (ya hay v1), límites. Muchas
-   pruebas hasta máx. beneficio / mín. riesgo.
-2. **Frontend** (React + lightweight-charts) leyendo la API.
-3. **Deploy v1 en VM Oracle** (systemd, fijar inception) y vigilancia diaria por logs.
-4. **Expansión futura** (anotado): más estrategias por moneda, monedas nuevas, recuperar
-   SOL/ETH/AVAX, VWAP_ANCHOR, ejecución maker (R4, lift chico), exits trailing para ORB.
-```
+## 5. Hecho ✅ (pilot v1 + endurecimiento)
+- Dirección (2 motores por moneda), refactor, Fase A (forward + monitor dry-run), Fase B (cartera v1).
+- Frontend v1 (Resumen · Señales · **Operaciones** · Validación forward) + descarga de logs por rango.
+- Desplegado en VM Oracle (dry-run, dashboard http://213.35.121.9:8787, ntfy oscar-oscilion-b26).
+- Tier 1 (busy_timeout, backup BD diario, tests pytest, universo único) + Tier 2 (consistencia
+  monitor↔engine, separación research/producción).
+- API: `/status /signals /portfolio /alerts /forward /trades /export /state /events /data /candidates`.
+
+## 6. Próxima sesión — pendiente y a vigilar
+1. **DESPLEGAR el último commit** (fix SQLITE_BUSY retry + pestaña Operaciones): `git push` (Oscar)
+   + `bash /opt/oscilion/deploy.sh`. Sin esto, esos cambios no están vivos.
+2. **Verificar persistencia de trades**: el trade TRX del 03/06 se perdió por SQLITE_BUSY (pre
+   busy_timeout). Confirmar que los próximos SÍ quedan en `/trades` y en el export.
+3. **Revisar el 1er trade persistido**: su **R** y **hora** — TRX +0.08% casi instantáneo sugiere
+   micro-breakout en TRX plano → evaluar **piso de ATR/movimiento mínimo**; y confirmar que el
+   **filtro de sesión EU/NY del ORB** se respeta (la alerta llegó ~01:48 UTC, fuera de [8,21)).
+4. **Acumular forward** y comparar vs backtest por moneda (keep/remove/fix/improve).
+5. **Explorar (con datos forward, validando)**: trailing/parciales, RR por moneda.
+6. **Limpiezas**: quitar tablas sin uso (`market_snapshots`, `calibration`); **CI en GitHub**
+   (pytest en checkout limpio → blinda la clase de bug del `.gitignore`).
+7. **Futuro mayor**: más estrategias/monedas, SOL/ETH/AVAX, VWAP_ANCHOR, ejecución maker, paper/live.
+
+> Docs clave: `STRATEGY_MAP.md` (dirección) · `B_PORTFOLIO_PLAN.md` · `DEPLOY.md` · `BTC_SALVAGE.md` · `VALIDATION_R1_R2.md`.
