@@ -118,6 +118,22 @@ def log_snapshot(
     )
 
 
+def log_series_snapshot(
+    sym: str, strategy: str, *, state: str, direction: str | None = None,
+    price: float | None = None, checklist_ok: int | None = None,
+    checklist_total: int | None = None, signal_active: bool = False,
+    in_trade: bool = False, ts: int | None = None,
+) -> Optional[int]:
+    """Snapshot conciso por ciclo de lo que ve el observador (append-only)."""
+    return _insert(
+        "series_snapshots",
+        dict(ts=ts or _now_ms(), sym=sym, strategy=strategy, state=state,
+             direction=direction, price=price, checklist_ok=checklist_ok,
+             checklist_total=checklist_total, signal_active=int(signal_active),
+             in_trade=int(in_trade)),
+    )
+
+
 def log_prediction(sym: str, **f: Any) -> Optional[int]:
     f["components"] = _jdump(f.get("components"))
     f.setdefault("ts", _now_ms())

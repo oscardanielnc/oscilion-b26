@@ -53,10 +53,11 @@ class _PosState:
 
 class LiveMonitor:
     def __init__(self, *, refresh_data: bool = True, capital: float = 10_000.0,
-                 forward_every_ticks: int = 240):
+                 forward_every_ticks: int = 240, snapshot_every_ticks: int = 60):
         self.refresh_data = refresh_data
         self.capital = capital
         self.forward_every_ticks = forward_every_ticks      # ~cada N ticks refresca forward
+        self.snapshot_every_ticks = snapshot_every_ticks    # ~cada N ticks deja snapshot (≈horario)
         self.assignments = all_assignments()
         self.symbols = sorted({s for s, _a in self.assignments})
         self._ticks = 0
@@ -120,7 +121,26 @@ class LiveMonitor:
                 forward.refresh()
             except Exception:
                 log.exception("forward refresh")
+
+        # snapshot conciso del observador: por cadencia (≈horario) o en cada cambio
+        # (cuando hubo alerta de entrada/salida) → rastro auditable aunque no opere.
+        cadence = self.snapshot_every_ticks and self._ticks % self.snapshot_every_ticks == 1
+        if cadence or alerts:
+            try:
+                self._persist_snapshots()
+            except Exception:
+                log.exception("persist snapshots")
         return alerts
+
+    def _persist_snapshots(self) -> None:
+        from oscilion.live.signals import live_signals
+        for s in live_signals():
+            db.log_series_snapshot(
+                s["sym"], s["strategy"], state=s["state"], direction=s["direction"],
+                price=s["price"], checklist_ok=s["checklist_ok"],
+                checklist_total=s["checklist_total"], signal_active=s["signal_active"],
+                in_trade=s["in_trade"],
+            )
 
     def _step_one(self, sym: str, a) -> list[dict]:
         st = self.states[(sym, a.strategy)]
