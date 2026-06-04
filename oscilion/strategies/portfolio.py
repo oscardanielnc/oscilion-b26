@@ -36,7 +36,14 @@ def key(sym: str, strategy: str) -> str:
     return f"{sym}|{strategy}"
 
 
+def _is_observe_only(sym: str, strategy: str) -> bool:
+    from oscilion.strategies.assignment import assignments_for
+    return any(a.strategy == strategy and a.observe_only for a in assignments_for(sym))
+
+
 def weight_of(sym: str, strategy: str) -> float:
+    if _is_observe_only(sym, strategy):
+        return 0.0                       # forward-test: nunca recibe capital
     return WEIGHTS.get(key(sym, strategy), 1.0)
 
 
@@ -55,7 +62,7 @@ class Allocation:
 def equal_weights() -> list[Allocation]:
     """Asignación provisional v1: capital igual entre las series del portfolio.
     B reemplazará esto por weights ∝ f(edge medido, 1/vol, correlación, Kelly fracc.)."""
-    items = all_assignments()
+    items = [(s, a) for s, a in all_assignments() if not a.observe_only]
     n = len(items) or 1
     w = 1.0 / n
     return [Allocation(sym, a.strategy, w, DEFAULT_LEVERAGE) for sym, a in items]

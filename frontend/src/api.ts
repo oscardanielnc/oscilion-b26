@@ -21,10 +21,11 @@ export interface Status {
 export interface Check { label: string; ok: boolean; }
 export interface Signal {
   sym: string; base: string; strategy: string; conviction: string; signal_tf: string;
+  observe_only?: boolean;
   price: number; state: string; signal_active: boolean; in_trade: boolean;
   horizon: string; horizon_h: number;
   direction: string; bias?: string; entry: number; stop: number; tp: number;
-  stop_pct: number | null; tp_pct: number | null; rr: number;
+  stop_pct: number | null; tp_pct: number | null; rr: number | string;
   levels: Record<string, number | null>;
   indicators: { RSI?: number; RSI_sano?: boolean };
   checklist: Check[]; checklist_ok: number; checklist_total: number;

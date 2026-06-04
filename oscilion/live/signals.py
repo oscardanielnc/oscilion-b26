@@ -107,6 +107,32 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
     }
 
 
+def _generic_view(a, price, cand) -> dict:
+    """Vista honesta para estrategias sin vista dedicada (p.ej. break_retest en
+    forward-test): refleja el candidato REAL si existe, sin inventar niveles ajenos."""
+    rr = a.params.get("tp_r", 0.0)
+    if cand:
+        side = cand["side"]
+        stop, tp = float(cand["stop"]), float(cand["tp"])
+        risk = abs(price - stop)
+        return {
+            "direction": side, "bias": side,
+            "entry": round(price, 6), "stop": round(stop, 6), "tp": round(tp, 6),
+            "stop_pct": round(risk / price * 100, 2) if price else None,
+            "tp_pct": round(abs(tp - price) / price * 100, 2) if (price and rr) else None,
+            "rr": rr if rr else "sin TP",
+            "levels": {}, "indicators": {},
+            "checklist": [{"label": "Ruptura silenciosa + retest confirmado", "ok": True}],
+        }
+    return {
+        "direction": "neutral", "bias": "long",
+        "entry": round(price, 6), "stop": round(price, 6), "tp": round(price, 6),
+        "stop_pct": None, "tp_pct": None, "rr": rr if rr else "sin TP",
+        "levels": {}, "indicators": {},
+        "checklist": [{"label": "Esperando ruptura silenciosa + retest", "ok": False}],
+    }
+
+
 def live_signals() -> list[dict]:
     out: list[dict] = []
     states = db.load_monitor_states()
@@ -119,8 +145,13 @@ def live_signals() -> list[dict]:
             continue
         atr = float(ctx.sig.atr[i]) if np.isfinite(ctx.sig.atr[i]) else 0.0
         price = _price_now(sym) or float(ctx.sig.close[i])
-        view = (_ema_view if a.strategy == "ema_trend_stack" else _orb_view)(ctx, i, a, price, atr)
         cand = S.REGISTRY[a.strategy]["fn"](ctx, i, a.params)
+        if a.strategy == "ema_trend_stack":
+            view = _ema_view(ctx, i, a, price, atr)
+        elif a.strategy == "orb_breakout":
+            view = _orb_view(ctx, i, a, price, atr)
+        else:
+            view = _generic_view(a, price, cand)        # break_retest u otras en forward-test
         st = states.get(f"{sym}|{a.strategy}", {})
         pos = st.get("position")
         n_ok = sum(1 for c in view["checklist"] if c["ok"])
@@ -133,7 +164,8 @@ def live_signals() -> list[dict]:
             horizon = f"corto · hasta ~{horizon_h} h"
         out.append({
             "sym": sym, "base": sym.split("/")[0], "strategy": a.strategy,
-            "conviction": a.conviction, "signal_tf": f"{ctx.sig_tf_h}h",
+            "conviction": a.conviction, "observe_only": a.observe_only,
+            "signal_tf": f"{ctx.sig_tf_h}h",
             "price": round(price, 6), "state": state, "signal_active": cand is not None,
             "in_trade": pos is not None, "position": pos,
             "horizon": horizon, "horizon_h": horizon_h,

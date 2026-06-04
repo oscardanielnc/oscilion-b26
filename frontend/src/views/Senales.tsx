@@ -29,6 +29,7 @@ function StrategyBlock({ s }: { s: Signal }) {
         <span className="strat-name">{STRAT_LABEL[s.strategy] || s.strategy}</span>
         <DirBadge s={s} />
         <span className="badge horizon">{s.horizon}</span>
+        {s.observe_only && <span className="badge observe" title="Forward-test sin capital — validando edge en vivo">🔬 observación</span>}
         <StateBadge s={s} />
       </div>
 

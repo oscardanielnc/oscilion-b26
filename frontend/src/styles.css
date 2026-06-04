@@ -32,6 +32,7 @@ header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-
 .badge.short { color: var(--red); border-color: #5a2730; }
 .badge.neutral { color: var(--muted); }
 .badge.neutral small { opacity: .7; }
+.badge.observe { color: var(--amber); border-color: #4a3f1a; }
 .badge.alta { color: var(--blue); border-color: #2a3f63; }
 .badge.horizon { color: #9fb4d4; }
 .badge.multi { color: var(--amber); border-color: #4a3f1a; }
