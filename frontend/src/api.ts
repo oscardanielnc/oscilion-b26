@@ -39,3 +39,8 @@ export interface Portfolio {
   max_concurrent: number; max_per_cluster: number; tuned: boolean;
 }
 export interface Alert { ts: number; level: string; msg: string; }
+export interface Trade {
+  ts: number; exit_ts: number | null; sym: string; side: string; strategy: string;
+  entry: number; exit: number; stop: number; tp: number;
+  r_multiple: number | null; pnl: number | null; status: string;
+}
