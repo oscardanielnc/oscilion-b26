@@ -47,9 +47,21 @@ research/                campañas de validación (edge_campaign, *_validation, 
 docs/                    VISION · STRATEGY_MAP · VALIDATION_R1_R2 · BTC_SALVAGE · B_PORTFOLIO_PLAN · este
 ```
 
-**Calidad/robustez:** SQLite WAL + lock (concurrencia API↔orquestador), escrituras atómicas
-(parquet, state.json), cada tick en try/except (no muere), migraciones idempotentes,
-estrategia = fuente única (backtest y live usan el mismo código → sin divergencia).
+**Calidad/robustez:** SQLite WAL + lock + **busy_timeout** (concurrencia API↔orquestador),
+escrituras atómicas (parquet, state.json), cada tick en try/except (no muere), migraciones
+idempotentes, estrategia = fuente única, **backup diario de la BD** (VACUUM INTO, data/backups/),
+**ejecución compartida engine↔monitor** (`costs.realized` → los trades del monitor coinciden con
+la validación forward), **tests** (`pytest`, 7 smoke) incl. guardián que impide que producción
+importe research.
+
+### Producción vs Research (separación, enforced por test)
+- **Producción (path vivo):** `config`, `persistence/{db,models}`, `data/{fetch,store,pipeline,universe}`,
+  `features/indicators`, `strategies/{library,context,assignment,portfolio,tuned}`,
+  `backtest/{engine_strat,resample,costs,portfolio_sim}`, `live/{monitor,forward,signals,export}`,
+  `signals/maker_taker`, `orchestrator`, `circuit_breaker`, `notify`, `logging_setup`, `api/app`.
+- **Research/legacy (NO en producción):** `analysis` (reversión), `backtest/{engine,metrics,report}`,
+  `scoring/conviction`, `features/{ranges,regime,reversion}`, `risk/{sizing,allocation,stops}`,
+  `signals/entry`. Los usan los scripts de `research/`. `test_production_no_importa_research` lo verifica.
 
 ---
 

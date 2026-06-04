@@ -5,6 +5,7 @@ que ocultó oscilion/data/ habría salido aquí en un checkout limpio), la invar
 de riesgo, el resampleo causal y que las estrategias no crashean.
 """
 import importlib
+import os
 import pkgutil
 
 import numpy as np
@@ -64,6 +65,29 @@ def test_strategies_no_crash():
     for name in ("ema_trend_stack", "orb_breakout", "momentum_pullback", "break_retest"):
         out = S.REGISTRY[name]["fn"](ctx, n - 1, {})
         assert out is None or "side" in out
+
+
+def test_production_no_importa_research():
+    """El path de PRODUCCIÓN (orquestador/API/live) NO debe importar módulos de
+    research/legacy (analysis, scoring, risk, backtest.engine/metrics/report,
+    features.{ranges,regime,reversion}, signals.entry). Mantiene la separación."""
+    import subprocess
+    import sys as _sys
+    code = (
+        "import oscilion.orchestrator, oscilion.api.app, oscilion.live.monitor, "
+        "oscilion.live.forward, oscilion.live.signals, oscilion.live.export, sys;"
+        "exact={'oscilion.analysis','oscilion.backtest.engine','oscilion.backtest.metrics',"
+        "'oscilion.backtest.report','oscilion.signals.entry','oscilion.features.ranges',"
+        "'oscilion.features.regime','oscilion.features.reversion'};"
+        "pref=('oscilion.scoring','oscilion.risk');"
+        "bad=[m for m in sys.modules if m in exact or any(m==p or m.startswith(p+'.') for p in pref)];"
+        "print('BAD:'+','.join(sorted(bad)))"
+    )
+    out = subprocess.run([_sys.executable, "-c", code], capture_output=True, text=True,
+                         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert out.returncode == 0, out.stderr
+    bad = out.stdout.strip().replace("BAD:", "")
+    assert bad == "", f"Producción importa research: {bad}"
 
 
 def test_universe_single_source():

@@ -155,15 +155,13 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         exit_ts = int(ets[k])
 
         taker_exit = exit_reason in ("stop", "timeout", "trail")
-        exit_fill = p.costs.fill_price(exit_px, side, is_entry=False, maker=not taker_exit)
-        fees = entry_fee + p.costs.fee(notional, maker=not taker_exit)
         fund = 0.0
         if fund_ts.size:
             m = (fund_ts > T) & (fund_ts <= exit_ts)
             if m.any():
                 fund = float(np.sum([p.costs.funding(notional, side, r) for r in fund_rate[m]]))
-        price_ret = (exit_fill - entry_px) / entry_px if side == "long" else (entry_px - exit_fill) / entry_px
-        pnl = price_ret * notional - fees - fund
+        pnl, exit_fill = p.costs.realized(side, entry_px, exit_px, notional, entry_fee,
+                                          maker_exit=not taker_exit, funding_total=fund)
         R = pnl / risk_amt if risk_amt > 0 else 0.0
         trades.append({
             "sym": sym, "strategy": p.strategy, "side": side,
