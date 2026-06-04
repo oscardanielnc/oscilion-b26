@@ -9,7 +9,7 @@ añadirán como sentencias idempotentes.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
@@ -154,6 +154,26 @@ TABLES: dict[str, str] = {
             updated_at  INTEGER NOT NULL
         )
     """,
+    # Snapshot conciso de lo que el OBSERVADOR ve por ciclo, por (sym, strategy).
+    # Append-only: deja rastro de "qué vio el bot cada ciclo" (estado, dirección,
+    # progreso del checklist) — consultable a diario aunque NO haya señal/trade.
+    # Se persiste por cadencia (~horaria) + en cada cambio (alerta).
+    "series_snapshots": """
+        CREATE TABLE IF NOT EXISTS series_snapshots (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts          INTEGER NOT NULL,          -- epoch ms del snapshot
+            sym         TEXT    NOT NULL,
+            strategy    TEXT    NOT NULL,
+            state       TEXT    NOT NULL,          -- esperando | activa | en_trade
+            direction   TEXT,                      -- long | short | neutral
+            price       REAL,
+            checklist_ok    INTEGER,               -- criterios cumplidos
+            checklist_total INTEGER,               -- criterios totales
+            signal_active   INTEGER NOT NULL DEFAULT 0,  -- 0/1 candidato listo
+            in_trade        INTEGER NOT NULL DEFAULT 0,  -- 0/1 posición abierta
+            created_at  INTEGER NOT NULL
+        )
+    """,
     # Control interno de versión de esquema.
     "schema_meta": """
         CREATE TABLE IF NOT EXISTS schema_meta (
@@ -178,4 +198,6 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS ix_decisions_sym_ts ON decisions(sym, ts)",
     "CREATE INDEX IF NOT EXISTS ix_trades_sym_status ON trades(sym, status)",
     "CREATE INDEX IF NOT EXISTS ix_events_level_ts ON events(level, ts)",
+    "CREATE INDEX IF NOT EXISTS ix_series_snap_ts ON series_snapshots(ts)",
+    "CREATE INDEX IF NOT EXISTS ix_series_snap_sym_strat_ts ON series_snapshots(sym, strategy, ts)",
 ]

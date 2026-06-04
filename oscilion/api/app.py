@@ -118,6 +118,18 @@ def export_logs(date_from: str | None = None, date_to: str | None = None, fmt: s
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+@app.get("/snapshots")
+def snapshots(limit: int = 200) -> list[dict]:
+    """Snapshots recientes del observador (estado/dirección/checklist por ciclo)."""
+    limit = max(1, min(limit, 2000))
+    with db._lock:
+        rows = db.get_connection().execute(
+            "SELECT ts, sym, strategy, state, direction, price, checklist_ok, checklist_total,"
+            " signal_active, in_trade FROM series_snapshots ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.get("/forward")
 def forward_results() -> list[dict]:
     """Validación forward: backtest vs vivo por moneda×estrategia (Fase A)."""

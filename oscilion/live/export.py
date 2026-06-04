@@ -49,9 +49,20 @@ def collect(from_ms: int, to_ms: int) -> dict:
             (from_ms, to_ms))]
         fwd = [dict(r) for r in con.execute(
             "SELECT sym, strategy, scope, n, win_rate, exp_r FROM forward_results ORDER BY sym, strategy, scope")]
+        snaps = [dict(r) for r in con.execute(
+            "SELECT sym, strategy, COUNT(*) n, SUM(signal_active) n_active, SUM(in_trade) n_in_trade,"
+            " MAX(checklist_ok) best_ok, MAX(checklist_total) tot"
+            " FROM series_snapshots WHERE ts>=? AND ts<? GROUP BY sym, strategy ORDER BY sym, strategy",
+            (from_ms, to_ms))]
+        latest = {f"{r['sym']}|{r['strategy']}": r["state"] for r in con.execute(
+            "SELECT sym, strategy, state FROM series_snapshots WHERE id IN"
+            " (SELECT MAX(id) FROM series_snapshots WHERE ts>=? AND ts<? GROUP BY sym, strategy)",
+            (from_ms, to_ms))}
+        for s in snaps:
+            s["latest_state"] = latest.get(f"{s['sym']}|{s['strategy']}", "—")
         counts = db.counts()
     return {"trades": trades, "alerts": alerts, "errors": errors,
-            "decisions": decisions, "forward": fwd, "counts": counts}
+            "decisions": decisions, "forward": fwd, "snapshots": snaps, "counts": counts}
 
 
 def _trade_summary(trades: list[dict]) -> list[dict]:
@@ -75,7 +86,7 @@ def build_markdown(date_from: str, date_to: str) -> str:
          f"_Generado {_lima(int(datetime.now(LIMA).timestamp()*1000))} · v{__version__} · modo {config.mode.value}_\n",
          "## Sistema",
          f"- Núcleo: {len(all_assignments())} series · límites maxc {P.MAX_CONCURRENT}/clúster {P.MAX_PER_CLUSTER} · tuned={P._TUNED}",
-         f"- DB filas: " + ", ".join(f"{k}={v}" for k, v in d['counts'].items() if k in ('trades', 'predictions', 'decisions', 'events', 'forward_results')),
+         f"- DB filas: " + ", ".join(f"{k}={v}" for k, v in d['counts'].items() if k in ('trades', 'predictions', 'decisions', 'events', 'forward_results', 'series_snapshots')),
          ""]
 
     L.append("## Validación forward (backtest vs vivo) — acumulado")
@@ -100,6 +111,17 @@ def build_markdown(date_from: str, date_to: str) -> str:
             L.append(f"| {s['strategy']} | {s['n']} | {s['winrate']*100:.0f}% | {s['avg_R']:+.3f} |")
     else:
         L.append("_Sin trades cerrados en el rango._")
+
+    L.append(f"\n## Actividad del observador (snapshots del rango)")
+    if d["snapshots"]:
+        L.append("| Moneda | Estrategia | ciclos | últ. estado | mejor checklist | señal activa | en trade |")
+        L.append("|---|---|--:|---|--:|--:|--:|")
+        for s in d["snapshots"]:
+            chk = f"{s['best_ok']}/{s['tot']}" if s["tot"] is not None else "—"
+            L.append(f"| {s['sym'].split('/')[0]} | {s['strategy']} | {s['n']} | {s['latest_state']} | "
+                     f"{chk} | {s['n_active'] or 0} | {s['n_in_trade'] or 0} |")
+    else:
+        L.append("_Sin snapshots en el rango (el monitor aún no los ha generado)._")
 
     L.append(f"\n## Alertas en el rango ({len(d['alerts'])})")
     for a in d["alerts"]:
