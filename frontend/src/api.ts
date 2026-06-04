@@ -23,7 +23,7 @@ export interface Signal {
   sym: string; base: string; strategy: string; conviction: string; signal_tf: string;
   price: number; state: string; signal_active: boolean; in_trade: boolean;
   horizon: string; horizon_h: number;
-  direction: string; entry: number; stop: number; tp: number;
+  direction: string; bias?: string; entry: number; stop: number; tp: number;
   stop_pct: number | null; tp_pct: number | null; rr: number;
   levels: Record<string, number | null>;
   indicators: { RSI?: number; RSI_sano?: boolean };

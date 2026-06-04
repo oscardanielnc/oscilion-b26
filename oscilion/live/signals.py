@@ -46,7 +46,7 @@ def _ema_view(ctx, i, a, price, atr) -> dict:
         {"label": "Sesión EU/NY", "ok": bool(session_ok)},
     ]
     return {
-        "direction": "long",
+        "direction": "long", "bias": "long",
         "entry": round(price, 6), "stop": round(stop, 6), "tp": round(tp, 6),
         "stop_pct": round(risk / price * 100, 2) if price else None,
         "tp_pct": round((tp - price) / price * 100, 2) if price else None,
@@ -69,12 +69,15 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
     session_ok = 8 <= (T // _H) % 24 < 21
     narrow_ok = width_pct is not None and width_pct <= a.params.get("range_max_pct", 0.015) * 100
     if price > hi:
-        direction = "long"
+        direction = bias = "long"            # ruptura real ↑
     elif price < lo:
-        direction = "short"
+        direction = bias = "short"           # ruptura real ↓
     else:
-        direction = "long" if (hi - price) <= (price - lo) else "short"   # borde más cercano
-    if direction == "long":
+        # dentro del rango: NO hay ruptura → no hay dirección comprometida.
+        # `bias` es solo el borde más cercano (sesgo visual), no una señal.
+        direction = "neutral"
+        bias = "long" if (hi - price) <= (price - lo) else "short"
+    if bias == "long":
         stop = min(lo - a.params.get("sl_atr_buf", 0.5) * atr, price - atr)
         risk = price - stop
         tp = price + a.params.get("tp_r", 4.0) * risk
@@ -91,7 +94,7 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
         {"label": "Sesión EU/NY", "ok": bool(session_ok)},
     ]
     return {
-        "direction": direction,
+        "direction": direction, "bias": bias,
         "entry": round(price, 6), "stop": round(stop, 6), "tp": round(tp, 6),
         "stop_pct": round(abs(price - stop) / price * 100, 2) if price else None,
         "tp_pct": round(abs(tp - price) / price * 100, 2) if price else None,
