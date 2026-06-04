@@ -26,31 +26,47 @@ header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 .stat .k { color: var(--muted); font-size: 12px; }
 .stat .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
-.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.sig-base { font-size: 18px; font-weight: 700; }
-.badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border);
-  background: var(--panel2); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.badge { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--panel2); color: var(--muted); letter-spacing: .3px; white-space: nowrap; }
 .badge.long { color: var(--green); border-color: #23503a; }
 .badge.short { color: var(--red); border-color: #5a2730; }
 .badge.alta { color: var(--blue); border-color: #2a3f63; }
-.state { margin-left: auto; font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 700; }
-.state.ESPERANDO { background: #1c2330; color: var(--muted); }
-.state.EN.TRADE, .state.entrade { background: #173a2a; color: var(--green); }
+.badge.horizon { color: #9fb4d4; }
+.badge.multi { color: var(--amber); border-color: #4a3f1a; }
+
+/* --- Señales: agrupadas por moneda --- */
+.coins { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+.coin-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.coin-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.coin-name { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+.coin-price { font-size: 18px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.coin-head .badge.multi { margin-left: auto; }
+
+.strat { padding: 14px 0; border-bottom: 1px dashed var(--border); }
+.strat:last-child { border-bottom: 0; padding-bottom: 2px; }
+.strat-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.strat-name { font-weight: 700; font-size: 14px; }
+.state { margin-left: auto; font-size: 10.5px; padding: 3px 10px; border-radius: 999px; font-weight: 700; letter-spacing: .4px; }
+.state.esperando { background: #1c2330; color: var(--muted); }
+.state.entrade { background: #173a2a; color: var(--green); }
 .state.activa { background: #3a3417; color: var(--amber); }
-.levels { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 10px 0; }
-.lv { display: flex; justify-content: space-between; font-size: 13px; }
-.lv .k { color: var(--muted); }
-.lv .v { font-variant-numeric: tabular-nums; }
-.trade-row { display: flex; gap: 14px; margin: 8px 0; font-variant-numeric: tabular-nums; }
-.trade-row .item { flex: 1; }
-.trade-row .lbl { color: var(--muted); font-size: 11px; }
-.trade-row .num { font-size: 15px; font-weight: 600; }
+
+.trade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 12px; }
+.trade-grid > div { display: flex; flex-direction: column; gap: 3px; }
+.trade-grid .lbl { color: var(--muted); font-size: 11px; }
+.trade-grid .num { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trade-grid .num small { font-weight: 500; color: var(--muted); margin-left: 6px; font-size: 12px; }
 .num.stop { color: var(--red); } .num.tp { color: var(--green); }
-.checklist { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.chk { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); padding: 2px 0; }
-.chk .dot { width: 14px; text-align: center; }
-.chk.ok { color: var(--txt); } .chk.ok .dot { color: var(--green); }
-.chk.no .dot { color: #4b5563; }
+
+.lv-row { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; font-size: 12.5px;
+  color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv b { color: #7c8aa0; font-weight: 600; margin-right: 2px; }
+
+.checklist { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  background: var(--bg); border-radius: 8px; padding: 9px 12px; }
+.chk-count { font-size: 11px; font-weight: 700; color: var(--muted); margin-right: 4px; }
+.chk { font-size: 12px; color: #5a6678; }
+.chk.ok { color: var(--green); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 th:first-child, td:first-child { text-align: left; }

@@ -122,11 +122,18 @@ def live_signals() -> list[dict]:
         pos = st.get("position")
         n_ok = sum(1 for c in view["checklist"] if c["ok"])
         state = "EN TRADE" if pos else ("SEÑAL ACTIVA" if cand else "ESPERANDO")
+        # horizonte máximo del trade (timeout) = max_hold × TF de señal
+        horizon_h = a.max_hold_signal_bars * ctx.sig_tf_h
+        if horizon_h >= 48:
+            horizon = f"swing · hasta ~{horizon_h // 24} días"
+        else:
+            horizon = f"corto · hasta ~{horizon_h} h"
         out.append({
             "sym": sym, "base": sym.split("/")[0], "strategy": a.strategy,
             "conviction": a.conviction, "signal_tf": f"{ctx.sig_tf_h}h",
             "price": round(price, 6), "state": state, "signal_active": cand is not None,
             "in_trade": pos is not None, "position": pos,
+            "horizon": horizon, "horizon_h": horizon_h,
             "checklist_ok": n_ok, "checklist_total": len(view["checklist"]),
             **view,
         })

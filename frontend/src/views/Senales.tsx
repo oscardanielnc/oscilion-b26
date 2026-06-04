@@ -2,45 +2,45 @@ import { Signal } from "../api";
 import { fmt, pct } from "../util";
 
 const STRAT_LABEL: Record<string, string> = {
-  ema_trend_stack: "Tendencia (EMA stack)",
-  orb_breakout: "Ruptura de rango (ORB)",
+  ema_trend_stack: "Tendencia · EMA stack",
+  orb_breakout: "Ruptura de rango · ORB",
 };
 
-function SignalCard({ s }: { s: Signal }) {
-  const stClass = s.in_trade ? "entrade" : s.signal_active ? "activa" : "ESPERANDO";
-  const stLabel = s.in_trade ? "EN TRADE" : s.signal_active ? "SEÑAL ACTIVA" : "ESPERANDO";
+function StateBadge({ s }: { s: Signal }) {
+  const cls = s.in_trade ? "entrade" : s.signal_active ? "activa" : "esperando";
+  const label = s.in_trade ? "EN TRADE" : s.signal_active ? "SEÑAL ACTIVA" : "ESPERANDO";
+  return <span className={"state " + cls}>{label}</span>;
+}
+
+function StrategyBlock({ s }: { s: Signal }) {
   return (
-    <div className="card">
-      <div className="sig-head">
-        <span className="sig-base">{s.base}</span>
+    <div className="strat">
+      <div className="strat-head">
+        <span className="strat-name">{STRAT_LABEL[s.strategy] || s.strategy}</span>
         <span className={"badge " + s.direction}>{s.direction === "long" ? "▲ Long" : "▼ Short"}</span>
-        <span className="badge">{STRAT_LABEL[s.strategy] || s.strategy} · {s.signal_tf}</span>
-        <span className={"state " + stClass}>{stLabel}</span>
+        <span className="badge horizon">{s.horizon}</span>
+        <StateBadge s={s} />
       </div>
 
-      <div className="trade-row">
-        <div className="item"><div className="lbl">Precio</div><div className="num">{fmt(s.price, 6)}</div></div>
-        <div className="item"><div className="lbl">Entrada</div><div className="num">{fmt(s.entry, 6)}</div></div>
-        <div className="item"><div className="lbl">Stop</div><div className="num stop">{fmt(s.stop, 6)} <span className="small muted">{pct(s.stop_pct ? -Math.abs(s.stop_pct) : null)}</span></div></div>
-        <div className="item"><div className="lbl">Target (RR {s.rr})</div><div className="num tp">{fmt(s.tp, 6)} <span className="small muted">{pct(s.tp_pct)}</span></div></div>
+      <div className="trade-grid">
+        <div><span className="lbl">Entrada</span><span className="num">{fmt(s.entry, 6)}</span></div>
+        <div><span className="lbl">Stop</span><span className="num stop">{fmt(s.stop, 6)}<small>{pct(s.stop_pct ? -Math.abs(s.stop_pct) : null)}</small></span></div>
+        <div><span className="lbl">Target · RR {s.rr}</span><span className="num tp">{fmt(s.tp, 6)}<small>{pct(s.tp_pct)}</small></span></div>
       </div>
 
-      <div className="levels">
+      <div className="lv-row">
         {Object.entries(s.levels).map(([k, v]) => (
-          <div className="lv" key={k}><span className="k">{k.replace(/_/g, " ")}</span><span className="v">{fmt(v as number, 6)}</span></div>
+          <span className="lv" key={k}><b>{k.replace(/_/g, " ")}</b> {fmt(v as number, 6)}</span>
         ))}
         {s.indicators.RSI !== undefined && (
-          <div className="lv"><span className="k">RSI</span>
-            <span className="v" style={{ color: s.indicators.RSI_sano ? "var(--green)" : "var(--muted)" }}>
-              {fmt(s.indicators.RSI, 1)} {s.indicators.RSI_sano ? "✓" : ""}</span></div>
+          <span className="lv"><b>RSI</b> <span style={{ color: s.indicators.RSI_sano ? "var(--green)" : "var(--muted)" }}>{fmt(s.indicators.RSI, 1)}{s.indicators.RSI_sano ? " ✓" : ""}</span></span>
         )}
       </div>
 
       <div className="checklist">
+        <span className="chk-count">{s.checklist_ok}/{s.checklist_total} criterios</span>
         {s.checklist.map((c, i) => (
-          <div className={"chk " + (c.ok ? "ok" : "no")} key={i}>
-            <span className="dot">{c.ok ? "✓" : "·"}</span>{c.label}
-          </div>
+          <span className={"chk " + (c.ok ? "ok" : "no")} key={i}>{c.ok ? "✓" : "○"} {c.label}</span>
         ))}
       </div>
     </div>
@@ -49,16 +49,35 @@ function SignalCard({ s }: { s: Signal }) {
 
 export function Senales({ signals }: { signals: Signal[] }) {
   if (!signals.length) return <div className="loading">Sin series configuradas.</div>;
-  // ordenar: en trade → señal activa → más condiciones cumplidas
-  const sorted = [...signals].sort((a, b) =>
-    Number(b.in_trade) - Number(a.in_trade) ||
-    Number(b.signal_active) - Number(a.signal_active) ||
-    b.checklist_ok - a.checklist_ok);
+
+  // agrupar por moneda
+  const byCoin = new Map<string, Signal[]>();
+  for (const s of signals) {
+    if (!byCoin.has(s.base)) byCoin.set(s.base, []);
+    byCoin.get(s.base)!.push(s);
+  }
+  // ordenar monedas: las que tienen trade/señal activa primero
+  const coins = [...byCoin.entries()].sort((a, b) => {
+    const score = (xs: Signal[]) => Math.max(...xs.map((x) => (x.in_trade ? 2 : x.signal_active ? 1 : 0) + x.checklist_ok / 10));
+    return score(b[1]) - score(a[1]);
+  });
+
   return (
     <>
-      <div className="section-title">Núcleo · {signals.length} series · dirección y niveles según la estrategia de cada moneda</div>
-      <div className="grid cards">
-        {sorted.map((s) => <SignalCard key={s.sym + s.strategy} s={s} />)}
+      <div className="section-title">
+        Núcleo · una moneda puede tener varias estrategias · "Entrada/Stop/Target" son niveles propuestos si entrara ahora
+      </div>
+      <div className="coins">
+        {coins.map(([base, list]) => (
+          <div className="coin-card" key={base}>
+            <div className="coin-head">
+              <span className="coin-name">{base}</span>
+              <span className="coin-price">{fmt(list[0].price, 6)}</span>
+              {list.length > 1 && <span className="badge multi">{list.length} estrategias</span>}
+            </div>
+            {list.map((s) => <StrategyBlock key={s.strategy} s={s} />)}
+          </div>
+        ))}
       </div>
     </>
   );
