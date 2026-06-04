@@ -117,3 +117,27 @@ Implementación: `oscilion/analysis.py::breakout_candidate`, `engine` con
 | `breakout_recency.py` | ¿el filtro range+≥2ATR repara la recencia? | `breakout_recency.md` |
 
 Todos paralelizan por símbolo (12 cores) con el pin de hilos BLAS.
+
+---
+
+## R6 — Horizonte de los trades EMA-trend (2026-06-04)
+
+> ¿Acortar el hold (timeout 240h ≈ 10d) reduce riesgo sin matar el edge?
+> Motor honesto, entrada fija validada, solo cambia el exit. OOS=2025→.
+> Reporte crudo: `data/reports/r6_exit_horizon.md` (regenerable: `research/exit_horizon.py`).
+
+**Marco:** el hold **mediano real es ~2 días**, no 10; el timeout de 10d solo muerde al 6-18% (la cola). Cripto cotiza 24/7 → **sin gaps de finde**; el funding ya está costeado.
+
+**Evidencia OOS (exp_R):**
+
+| Moneda | baseline 240h | 120h | 96h | 72h | Lectura |
+|---|---:|---:|---:|---:|---|
+| BTC | **+0.131** | +0.021 | −0.007 | −0.105 | acortar **destruye** el edge (monótono) |
+| BNB | **+0.407** | +0.348 | +0.222 | +0.065 | 120h casi gratis; <96h colapsa |
+| TRX | +0.137 | +0.123 | −0.074 | +0.141 | tolera 72-120h, ~neutral |
+
+Trailing (1.5/2/3 ATR) y time-stops ≤72h salieron negativos o peores → **confirma aprendizaje #9 (recortar ganadores hace daño)**. El edge de tendencia vive en los runners.
+
+**Decisión:** BTC mantiene 240h (no tocar). **BNB y TRX → cap 120h** (`max_hold` 30 barras 4h): ~gratis en OOS y elimina el 100% de zombies de 10d (timeout 6-8% → 0%).
+
+**Bug colateral corregido:** el monitor en vivo NO aplicaba timeout (`_manage` solo cerraba por stop/tp → posición eterna). Ahora cierra a mercado al vencer el horizonte (reason `timeout`, alerta ⏱️ CIERRE_TIEMPO), consistente con el motor honesto.

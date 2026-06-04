@@ -35,6 +35,11 @@ class StratParams:
     exit_mode: str = "fixed_tp"           # fixed_tp | trailing (R5)
     trail_atr: float = 2.0                # distancia de trailing en ATR de la señal
     be_at_r: float = 1.0                  # mover a break-even a +be_at_r·R
+    # time-stop (R6): tras `time_stop_h` horas, salir a mercado SALVO que el trade
+    # vaya ganando ≥ `time_stop_keep_r`·R (deja correr ganadores — aprendizaje #9).
+    # 0 = desactivado. keep_r enorme = time-stop duro (corta sí o sí).
+    time_stop_h: float = 0.0
+    time_stop_keep_r: float = 1e9
     params: dict = field(default_factory=dict)
 
 
@@ -115,6 +120,16 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         exit_px = exit_reason = None
         k = ei
         deadline = T + max_hold_ms
+        ts_on = p.time_stop_h > 0
+        ts_ms = p.time_stop_h * _H
+
+        def _time_stop(kk: int):
+            """Si toca el time-stop y el trade NO va ganando ≥ keep_r → salir al cierre."""
+            if not ts_on or (ets[kk] - T) < ts_ms:
+                return None
+            ur = ((ec[kk] - entry_px) if side == "long" else (entry_px - ec[kk])) / risk_dist
+            return None if ur >= p.time_stop_keep_r else (float(ec[kk]), "time")
+
         if p.exit_mode == "trailing":
             trail_d = p.trail_atr * atr_sig
             be_move = p.be_at_r * risk_dist
@@ -125,6 +140,9 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
                 # 1) chequear stop con el nivel vigente (de barras previas) — pesimista
                 if (side == "long" and lo <= cur_stop) or (side == "short" and hi >= cur_stop):
                     exit_px, exit_reason = cur_stop, "trail"; break
+                ts = _time_stop(k)
+                if ts:
+                    exit_px, exit_reason = ts; break
                 # 2) actualizar mejor precio y ratchet del stop
                 if side == "long":
                     best = max(best, hi)
@@ -146,6 +164,9 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
                     hit_stop, hit_tp = hi >= stop, lo <= tp
                 if hit_stop:
                     exit_px, exit_reason = stop, "stop"; break
+                ts = _time_stop(k)
+                if ts:
+                    exit_px, exit_reason = ts; break
                 if hit_tp:
                     exit_px, exit_reason = tp, "tp"; break
                 k += 1
@@ -154,7 +175,7 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
             exit_px, exit_reason = float(ec[k]), "timeout"
         exit_ts = int(ets[k])
 
-        taker_exit = exit_reason in ("stop", "timeout", "trail")
+        taker_exit = exit_reason in ("stop", "timeout", "trail", "time")
         fund = 0.0
         if fund_ts.size:
             m = (fund_ts > T) & (fund_ts <= exit_ts)

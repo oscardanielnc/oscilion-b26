@@ -168,9 +168,14 @@ class LiveMonitor:
                                 stop=stop, tp=tp, components={"strategy": a.strategy, "side": side})
         db.log_decision(sym, "entrar", f"{a.strategy} {side} entry≈{entry:.6g}", prediction_id=pid)
         st = self.states[(sym, a.strategy)]
+        # timeout = max_hold barras de señal (igual que el engine honesto) → la posición
+        # NO vive para siempre; se cierra a mercado al vencer el horizonte.
+        sig_tf_h = S.REGISTRY[a.strategy]["signal_tf_h"]
+        deadline_ts = sig_close + a.max_hold_signal_bars * sig_tf_h * _H
         st.position = {"side": side, "entry": entry, "stop": stop, "init_stop": stop, "tp": tp,
                        "entry_ts": sig_close, "stop_pct": stop_pct, "notional": notional,
-                       "entry_fee": entry_fee, "risk_amt": risk_amt, "strategy": a.strategy}
+                       "entry_fee": entry_fee, "risk_amt": risk_amt, "strategy": a.strategy,
+                       "deadline_ts": deadline_ts}
         st.last_15m_ts = sig_close
         msg = (f"🟢 ENTRA {sym} {side.upper()} [{a.strategy}] @ {entry:.6g} | "
                f"stop {stop:.6g} tp {tp:.6g}")
@@ -189,14 +194,17 @@ class LiveMonitor:
             return None
         hi = m15["high"].to_numpy(); lo = m15["low"].to_numpy(); cl = m15["close"].to_numpy()
         side, stop, tp = pos["side"], pos["stop"], pos["tp"]
+        deadline = pos.get("deadline_ts")            # None en posiciones de formato previo
         for k in np.flatnonzero(mask):
             st.last_15m_ts = int(ts[k])
             if side == "long":
                 hit_stop, hit_tp = lo[k] <= stop, hi[k] >= tp
             else:
                 hit_stop, hit_tp = hi[k] >= stop, lo[k] <= tp
-            if hit_stop:
+            if hit_stop:                              # pesimista: stop antes que tiempo/tp
                 return self._close(sym, st, stop, int(ts[k]), "stop")
+            if deadline is not None and ts[k] >= deadline:
+                return self._close(sym, st, float(cl[k]), int(ts[k]), "timeout")
             if hit_tp:
                 return self._close(sym, st, tp, int(ts[k]), "tp")
         return None
@@ -218,8 +226,12 @@ class LiveMonitor:
         db.log_trade(sym, side, config.mode.value, entry=pos["entry"], stop=pos["init_stop"],
                      tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=pos["notional"],
                      strategy=pos["strategy"], r_multiple=R, pnl=pnl, funding=fund)
-        kind = "SAL" if reason == "stop" else "TOMA_GANANCIA"
-        icon = "🔴" if reason == "stop" else "🟢"
+        if reason == "stop":
+            kind, icon = "SAL", "🔴"
+        elif reason == "timeout":
+            kind, icon = "CIERRE_TIEMPO", "⏱️"
+        else:
+            kind, icon = "TOMA_GANANCIA", "🟢"
         msg = f"{icon} {kind} {sym} [{pos['strategy']}] @ {exit_fill:.6g} | {R:+.2f}R ({reason})"
         notify(msg, "INFO", "live.monitor")
         st.position = None
