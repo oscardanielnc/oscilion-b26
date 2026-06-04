@@ -1,7 +1,7 @@
 import { Trade, Alert } from "../api";
 import { fmt, cls, timeLima } from "../util";
 
-const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB" };
+const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB", vwap_anchor: "VWAP anchor", break_retest: "Break+Retest" };
 
 function summary(trades: Trade[]) {
   const by: Record<string, Trade[]> = {};
