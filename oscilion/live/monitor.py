@@ -68,7 +68,12 @@ class LiveMonitor:
         for s, a in self.assignments:
             k = self._key(s, a.strategy)
             if k in saved:
-                self.states[(s, a.strategy)] = _PosState.from_dict(saved[k])
+                stt = _PosState.from_dict(saved[k])
+                # descarta posiciones de un formato anterior (sin los campos de
+                # ejecución actuales) para no romper el cierre tras un upgrade.
+                if stt.position and "notional" not in stt.position:
+                    stt.position = None
+                self.states[(s, a.strategy)] = stt
                 rehydrated += 1
             else:
                 self.states[(s, a.strategy)] = _PosState()
