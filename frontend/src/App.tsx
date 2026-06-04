@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
-import { getJSON, Status, Signal, Forward, Portfolio, Alert } from "./api";
+import { getJSON, Status, Signal, Forward, Portfolio, Alert, Trade } from "./api";
 import { Resumen } from "./views/Resumen";
 import { Senales } from "./views/Senales";
 import { Validacion } from "./views/Validacion";
+import { Operaciones } from "./views/Operaciones";
 
-type Tab = "resumen" | "senales" | "validacion";
+type Tab = "resumen" | "senales" | "operaciones" | "validacion";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("resumen");
@@ -13,17 +14,18 @@ export default function App() {
   const [forward, setForward] = useState<Forward[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [updated, setUpdated] = useState<number>(0);
   const [err, setErr] = useState<string>("");
 
   const load = useCallback(async () => {
     try {
-      const [st, sg, fw, pf, al] = await Promise.all([
+      const [st, sg, fw, pf, al, tr] = await Promise.all([
         getJSON<Status>("/status"), getJSON<Signal[]>("/signals"),
         getJSON<Forward[]>("/forward"), getJSON<Portfolio>("/portfolio"),
-        getJSON<Alert[]>("/alerts"),
+        getJSON<Alert[]>("/alerts"), getJSON<Trade[]>("/trades"),
       ]);
-      setStatus(st); setSignals(sg); setForward(fw); setPortfolio(pf); setAlerts(al);
+      setStatus(st); setSignals(sg); setForward(fw); setPortfolio(pf); setAlerts(al); setTrades(tr);
       setUpdated(Date.now()); setErr("");
     } catch (e: any) { setErr(String(e.message || e)); }
   }, []);
@@ -53,6 +55,7 @@ export default function App() {
       <nav className="tabs">
         <div className={"tab" + (tab === "resumen" ? " active" : "")} onClick={() => setTab("resumen")}>Resumen</div>
         <div className={"tab" + (tab === "senales" ? " active" : "")} onClick={() => setTab("senales")}>Señales en vivo</div>
+        <div className={"tab" + (tab === "operaciones" ? " active" : "")} onClick={() => setTab("operaciones")}>Operaciones</div>
         <div className={"tab" + (tab === "validacion" ? " active" : "")} onClick={() => setTab("validacion")}>Validación forward</div>
       </nav>
 
@@ -61,6 +64,7 @@ export default function App() {
 
       {status && tab === "resumen" && <Resumen status={status} signals={signals} portfolio={portfolio} alerts={alerts} />}
       {status && tab === "senales" && <Senales signals={signals} />}
+      {status && tab === "operaciones" && <Operaciones trades={trades} alerts={alerts} />}
       {status && tab === "validacion" && <Validacion forward={forward} />}
 
       <div className="disclaimer">

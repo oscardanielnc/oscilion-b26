@@ -73,19 +73,31 @@ def init_db() -> None:
 
 
 def _insert(table: str, data: dict[str, Any]) -> Optional[int]:
-    """INSERT genérico, defensivo. Devuelve el id o None si falla."""
+    """INSERT genérico, defensivo con reintentos. Devuelve el id o None.
+
+    Reintenta ante 'database is locked' (contención entre procesos) además del
+    PRAGMA busy_timeout, para NO perder registros críticos (trades/alertas).
+    """
     data = {**data, "created_at": _now_ms()}
     cols = ", ".join(data.keys())
     ph = ", ".join("?" for _ in data)
-    try:
-        with _lock:
-            cur = get_connection().execute(
-                f"INSERT INTO {table} ({cols}) VALUES ({ph})", tuple(data.values())
-            )
-        return cur.lastrowid
-    except Exception:  # nunca tumbar el tick por un fallo de persistencia
-        log.exception("Fallo al insertar en %s", table)
-        return None
+    sql = f"INSERT INTO {table} ({cols}) VALUES ({ph})"
+    vals = tuple(data.values())
+    for attempt in range(4):
+        try:
+            with _lock:
+                cur = get_connection().execute(sql, vals)
+            return cur.lastrowid
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower() and attempt < 3:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            log.error("INSERT %s falló (locked) tras reintentos: %s", table, e)
+            return None
+        except Exception:  # nunca tumbar el tick por un fallo de persistencia
+            log.exception("Fallo al insertar en %s", table)
+            return None
+    return None
 
 
 def _jdump(obj: Any) -> Optional[str]:
