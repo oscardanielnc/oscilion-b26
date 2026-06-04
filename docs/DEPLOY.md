@@ -23,7 +23,8 @@ Esto:
 3. crea `/etc/oscilion.env` (con `OSCILION_NTFY_TOPIC=oscar-oscilion-b26` y modo `dry-run`)
    y **fija `OSCILION_FORWARD_INCEPTION_MS` a la fecha de despliegue** (de aquí en
    adelante = datos no vistos = forward real),
-4. **siembra 3 años de histórico** de las 5 monedas del núcleo (tarda ~5-10 min),
+4. **siembra 3 años de histórico** de las monedas del núcleo (las que define
+   `assignment.py`; hoy 9) — tarda ~5-10 min,
 5. instala y arranca los servicios systemd (`oscilion` = monitor, `oscilion-api` = API).
 
 > Si la siembra de datos falla por red, re-correr:
