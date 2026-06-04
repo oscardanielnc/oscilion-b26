@@ -70,6 +70,13 @@ GRIDS = {
         "trend_filter": [True, False],
         "long_only": [True, False],
     },
+    "vwap_anchor": {
+        "sl_atr_mult": [1.5, 2.0, 2.5],
+        "tp_r": [0.0, 2.0, 2.5, 4.0],            # 0 = sin TP (corre a SL/timeout)
+        "fresh_gate": [True, False],
+        "trend_filter": [True, False],
+        "session_filter": [True, False],
+    },
 }
 DEFAULTS = {
     "momentum_pullback": {"impulse_atr_min": 0.8, "pullback_max": 0.8, "tp_r": 2.0,
@@ -80,8 +87,11 @@ DEFAULTS = {
                      "long_only": False, "session_filter": True},
     "break_retest": {"vol_max_ratio": 1.0, "retest_half_atr": 0.3, "tp_r": 0.0,
                      "trend_filter": True, "long_only": False},
+    "vwap_anchor": {"sl_atr_mult": 2.0, "tp_r": 2.5, "fresh_gate": True,
+                    "trend_filter": False, "session_filter": False},
 }
-MAXHOLD = {"momentum_pullback": 60, "ema_trend_stack": 60, "orb_breakout": 24, "break_retest": 42}
+MAXHOLD = {"momentum_pullback": 60, "ema_trend_stack": 60, "orb_breakout": 24,
+           "break_retest": 42, "vwap_anchor": 120}      # 1h × 120 = 5 días
 MIN_TRAIN = 30
 MIN_TEST = 20
 MIN_WF = 30
