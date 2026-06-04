@@ -184,3 +184,33 @@ tienen full o test negativo → WF positivo huele a suerte de fold; tratar como 
 
 **Caveats:** WR bajo (12-37%) → cola gorda, depende de pocos ganadores grandes; los WF eligen casi siempre
 **tp_r=0** (sin TP, deja correr) — coherente con #9. n OOS modesto (36-110). Confianza moderada-positiva.
+
+---
+
+## R7 — Patrones de vela como filtro (2026-06-04)
+
+> Estudio de poder discriminante (independiente de estrategia), 12 monedas, 3 años, 1h.
+> 6 patrones de sentinel; métrica = P(dirección correcta) con barreras ±1·ATR, H=24h.
+> `research/candle_patterns.py`. (~6500 eventos/moneda; SE≈0.6pp.)
+
+**Parte 1 — Patrón SOLO = SIN edge.** P(correcta) entre 49.0% y 50.8% en las 12 monedas →
+indistinguible de 50% (azar). Confirma sentinel y la tesis "un patrón no garantiza nada".
+
+**Hipótesis 'volátiles respetan más' → NO apoyada (en 1h).** Spearman respeto↔volatilidad
+ρ=**−0.48** (p=0.12): si acaso, las MENOS volátiles (BNB 0.71%, TRX 0.44%) respetaron algo más;
+las más volátiles (SOL/AVAX/DOT/LINK ~1.2%) quedaron en medio/abajo. (Sentinel lo vio en 15m →
+puede ser dependiente del TF; pendiente verificar en 15m.)
+
+**Parte 2 — Confirmadores (lift en P, equiponderado, consistencia entre monedas):**
+
+| Indicador | lift | consistencia | lectura |
+|---|--:|--:|---|
+| vwap_lado (precio del lado correcto de VWAP) | +1.5pp | 10/12 | mejor, pero pequeño |
+| trend (precio vs EMA50 alineado) | +1.1pp | 10/12 | consistente |
+| vol_spike / vol_alta | +0.5–0.8pp | 6–8/12 | ruidoso |
+| **rsi_extremo** (reversión en sobreventa/compra) | **−3.7pp** | 1/12 | **DAÑA** |
+| en_extremo (en soporte/resistencia) | −0.8pp | 6/12 | no ayuda |
+
+**Síntesis:** el patrón vale algo SOLO con la TENDENCIA (alineado a VWAP/EMA50 = continuación),
+nunca como reversión (RSI extremo y "en soporte" restan). El lift es marginal (~1-1.5pp) → sirve
+como **filtro/boost de confluencia sobre una estrategia trend existente, jamás como señal primaria**.
