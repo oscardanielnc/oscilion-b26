@@ -214,3 +214,21 @@ puede ser dependiente del TF; pendiente verificar en 15m.)
 **Síntesis:** el patrón vale algo SOLO con la TENDENCIA (alineado a VWAP/EMA50 = continuación),
 nunca como reversión (RSI extremo y "en soporte" restan). El lift es marginal (~1-1.5pp) → sirve
 como **filtro/boost de confluencia sobre una estrategia trend existente, jamás como señal primaria**.
+
+### R7b — Verificación 15m + SUI (2026-06-04)
+
+> Repetido en 15m (TF nativo de sentinel) y añadida SUI (caso fuerte en sentinel).
+> `research/candle_patterns.py 15m`. n enorme (25k+ eventos/moneda → SE≈0.3pp).
+
+**Patrón solo = cero edge, confirmado en 15m.** P(correcta) 49.2-50.2% (ruido con ese n).
+
+**Hipótesis 'volátiles respetan más' → ENTERRADA (2 TFs).** 1h ρ=−0.21 (p=0.48), 15m ρ=+0.08 (p=0.79).
+SUI fue alta en 1h (50.7%, y la más volátil 1.56%) pero **media en 15m** (49.9%) → el caso de sentinel
+no reproduce en datos honestos. Sin correlación respeto↔volatilidad en ninguno.
+
+**Confirmadores (15m, consistente con 1h):** trend +1.2pp (11/13), vwap_lado +0.9pp (11/13),
+stack +0.8pp (11/13), vol_spike +0.7pp (12/13). Reversión vuelve a restar (rsi_extremo −1.0, en_extremo −0.9).
+
+**VEREDICTO FINAL:** patrones de vela NO se despliegan. Solos = ruido; la única confluencia útil
+(alineación con tendencia) ya la capturan las estrategias trend (ema/vwap/orb). Lift ~1pp no justifica
+la complejidad. Documentado y aparcado.
