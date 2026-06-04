@@ -28,8 +28,9 @@ _EMA = dict(atr_mult_sl=1.5, tp_r=4.0, fresh_gate=True, session_filter=True, rsi
 _ORB = dict(range_max_pct=0.015, tp_r=4.0, fresh_gate=True, long_only=False, session_filter=True)
 
 
-def _ema(conv, note=""):
-    return Assign("ema_trend_stack", dict(_EMA), 60, conv, note=note)
+def _ema(conv, note="", max_hold=60):
+    # max_hold en barras de 4h: 60 = 240h (~10d) baseline; 30 = 120h (~5d) cap de cola.
+    return Assign("ema_trend_stack", dict(_EMA), max_hold, conv, note=note)
 
 
 def _orb(conv, note=""):
@@ -38,9 +39,11 @@ def _orb(conv, note=""):
 
 # NÚCLEO de alta convicción (full+OOS+WF positivos)
 PORTFOLIO: dict[str, list[Assign]] = {
-    "BTC/USDT:USDT":  [_ema("alta", "trender limpio; full+0.34/OOS+0.13")],
-    "BNB/USDT:USDT":  [_ema("alta", "trender limpio; full+0.13/OOS+0.41")],
-    "TRX/USDT:USDT":  [_ema("alta", "full+0.34/OOS+0.14"),
+    # BTC: hold-10d intacto — R6 mostró que acortar destruye su edge OOS (+0.13→neg).
+    "BTC/USDT:USDT":  [_ema("alta", "trender limpio; full+0.34/OOS+0.13; hold-10d (R6: no acortar)")],
+    # BNB/TRX: cap de cola 120h — R6: ~gratis OOS y elimina el 100% de zombies de 10d.
+    "BNB/USDT:USDT":  [_ema("alta", "full+0.13/OOS+0.41; cap120h (R6 OOS+0.35)", max_hold=30)],
+    "TRX/USDT:USDT":  [_ema("alta", "full+0.34/OOS+0.14; cap120h (R6 OOS+0.12)", max_hold=30),
                        _orb("alta", "full+0.18/OOS+0.29; trend Y breakout")],
     "LINK/USDT:USDT": [_orb("alta", "ORB rescata; full+0.20/OOS+0.31")],
     "DOT/USDT:USDT":  [_orb("alta", "ORB rescata; full+0.13/OOS+0.10")],
