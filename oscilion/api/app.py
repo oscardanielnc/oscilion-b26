@@ -96,6 +96,28 @@ def alerts(limit: int = 40) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@app.get("/export")
+def export_logs(date_from: str | None = None, date_to: str | None = None, fmt: str = "md"):
+    """Descarga logs del rango [date_from..date_to] (YYYY-MM-DD, días Lima; default hoy).
+    Conciso: sistema + validación forward + trades + alertas + errores. fmt=md|json."""
+    from datetime import datetime, timedelta, timezone
+    from fastapi import Response
+    from oscilion.live import export as ex
+
+    hoy = datetime.now(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d")
+    date_from = date_from or hoy
+    date_to = date_to or hoy
+    if fmt == "json":
+        body = ex.build_json(date_from, date_to)
+        media, suf = "application/json", "json"
+    else:
+        body = ex.build_markdown(date_from, date_to)
+        media, suf = "text/markdown; charset=utf-8", "md"
+    fname = f"oscilion_logs_{date_from}_{date_to}.{suf}"
+    return Response(content=body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @app.get("/forward")
 def forward_results() -> list[dict]:
     """Validación forward: backtest vs vivo por moneda×estrategia (Fase A)."""

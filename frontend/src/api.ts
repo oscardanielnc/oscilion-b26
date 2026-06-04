@@ -1,11 +1,15 @@
 // Capa de acceso a la API. En dev apunta al servidor FastAPI; en prod (servido
 // por la propia API) usa mismo origen.
-const BASE = import.meta.env.DEV ? "http://127.0.0.1:8787" : "";
+export const API_BASE = import.meta.env.DEV ? "http://127.0.0.1:8787" : "";
 
 export async function getJSON<T>(path: string): Promise<T> {
-  const r = await fetch(BASE + path);
+  const r = await fetch(API_BASE + path);
   if (!r.ok) throw new Error(`${path} → ${r.status}`);
   return r.json();
+}
+
+export function exportUrl(from: string, to: string, fmt: "md" | "json"): string {
+  return `${API_BASE}/export?date_from=${from}&date_to=${to}&fmt=${fmt}`;
 }
 
 // ---- tipos ----
