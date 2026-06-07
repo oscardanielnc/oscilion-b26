@@ -17,10 +17,15 @@ import numpy as np
 
 from config import config
 from oscilion.backtest.engine_strat import StratParams, backtest_symbol_strat
+from oscilion.data import store
 from oscilion.persistence import db
 from oscilion.strategies import all_assignments
 
 log = logging.getLogger(__name__)
+
+# Por debajo de esto, 0 trades NO significa "sin edge" sino "moneda oscura"
+# (histórico no sembrado): con ~3 años hay 26k velas 1h; <1000 = sin backfill.
+DARK_COIN_MIN_BARS = 1000
 
 
 def _stats(trades: list[dict]) -> dict:
@@ -38,6 +43,7 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
     inception = inception_ms or config.forward_inception_ms
     db.init_db()
     out: list[dict] = []
+    dark: list[str] = []
     for sym, a in all_assignments():
         try:
             trades = backtest_symbol_strat(sym, StratParams(
@@ -46,12 +52,22 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
         except Exception:
             log.exception("forward refresh falló %s %s", sym, a.strategy)
             continue
+        # 0 trades + histórico ínfimo = moneda oscura (sin backfill), NO "sin edge".
+        # Delatarlo aquí evita que un n=0 mudo pase por validación silenciosa.
+        if not trades:
+            bars = len(store.load_bars(sym, config.base_timeframe))
+            if bars < DARK_COIN_MIN_BARS:
+                dark.append(f"{sym.split('/')[0]}|{a.strategy}({bars}velas)")
         bt = _stats([t for t in trades if t["entry_ts"] < inception])
         fw = _stats([t for t in trades if t["entry_ts"] >= inception])
         for scope, s in (("backtest", bt), ("forward", fw)):
             db.upsert_forward_result(sym, a.strategy, scope, **s)
         out.append({"sym": sym, "strategy": a.strategy, "backtest": bt, "forward": fw})
-    db.log_event("INFO", "live.forward", f"forward refresh: {len(out)} series")
+    if dark:
+        log.warning("forward: %d serie(s) oscura(s) sin histórico: %s", len(dark), ", ".join(dark))
+        db.log_event("WARN", "live.forward",
+                     f"{len(dark)} serie(s) sin histórico (backfill pendiente): {', '.join(dark)}")
+    db.log_event("INFO", "live.forward", f"forward refresh: {len(out)} series, {len(dark)} oscuras")
     return out
 
 
