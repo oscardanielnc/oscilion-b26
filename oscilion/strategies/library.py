@@ -39,6 +39,14 @@ class Ctx:
     aux: dict = field(default_factory=dict)        # hours -> TFArrays
 
 
+def tp_barrier(tp: float | None, side: str) -> float:
+    """Nivel de TP para chequeos hi/lo. tp=None = runner (sin TP): devuelve ±inf,
+    que NUNCA dispara — nada de centinelas 1e18 que contaminan sizing/logs."""
+    if tp is None:
+        return float("inf") if side == "long" else float("-inf")
+    return float(tp)
+
+
 def aux_at(ctx: Ctx, h: int, T: int) -> int | None:
     """Índice del bar de TF `h` ya CERRADO en el instante T (close ≤ T)."""
     a = ctx.aux.get(h)
@@ -177,10 +185,10 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     tp_r = p.get("tp_r", 4.0)
     if tp_r <= 0:
-        tp = 1e18 if side == "long" else -1e18    # sin TP (corre hasta SL/timeout)
+        tp = None                                 # runner: sin TP (corre hasta SL/timeout)
     else:
-        tp = price + tp_r * risk if side == "long" else price - tp_r * risk
-    return {"side": side, "entry_ref": price, "stop": float(stop), "tp": float(tp)}
+        tp = float(price + tp_r * risk if side == "long" else price - tp_r * risk)
+    return {"side": side, "entry_ref": price, "stop": float(stop), "tp": tp}
 
 
 # ------------------------------- VWAP ANCHOR ---------------------------------
@@ -220,8 +228,8 @@ def vwap_anchor(ctx: Ctx, i: int, p: dict) -> dict | None:
     if risk <= 0:
         return None
     tp_r = p.get("tp_r", 2.5)
-    tp = (price + tp_r * risk) if tp_r > 0 else 1e18      # 0 = sin TP (corre a SL/timeout)
-    return {"side": "long", "entry_ref": price, "stop": float(stop), "tp": float(tp)}
+    tp = float(price + tp_r * risk) if tp_r > 0 else None  # None = runner (sin TP)
+    return {"side": "long", "entry_ref": price, "stop": float(stop), "tp": tp}
 
 
 # ------------------------------ BREAK + RETEST -------------------------------
@@ -263,10 +271,10 @@ def break_retest(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     tp_r = p.get("tp_r", 4.0)
     if tp_r <= 0:
-        tp = 1e18 if side == "long" else -1e18
+        tp = None                                 # runner: sin TP
     else:
-        tp = price + tp_r * risk if side == "long" else price - tp_r * risk
-    return {"side": side, "entry_ref": price, "stop": float(stop), "tp": float(tp)}
+        tp = float(price + tp_r * risk if side == "long" else price - tp_r * risk)
+    return {"side": side, "entry_ref": price, "stop": float(stop), "tp": tp}
 
 
 REGISTRY = {

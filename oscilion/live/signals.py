@@ -149,13 +149,15 @@ def _generic_view(a, price, cand) -> dict:
     rr = a.params.get("tp_r", 0.0)
     if cand:
         side = cand["side"]
-        stop, tp = float(cand["stop"]), float(cand["tp"])
+        stop = float(cand["stop"])
+        tp = float(cand["tp"]) if cand.get("tp") is not None else None   # None = runner
         risk = abs(price - stop)
         return {
             "direction": side, "bias": side,
-            "entry": round(price, 6), "stop": round(stop, 6), "tp": round(tp, 6),
+            "entry": round(price, 6), "stop": round(stop, 6),
+            "tp": round(tp, 6) if tp is not None else "runner",
             "stop_pct": round(risk / price * 100, 2) if price else None,
-            "tp_pct": round(abs(tp - price) / price * 100, 2) if (price and rr) else None,
+            "tp_pct": round(abs(tp - price) / price * 100, 2) if (price and rr and tp is not None) else None,
             "rr": rr if rr else "sin TP",
             "levels": {}, "indicators": {},
             "checklist": [{"label": "Ruptura silenciosa + retest confirmado", "ok": True}],

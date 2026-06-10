@@ -9,7 +9,7 @@ añadirán como sentencias idempotentes.
 """
 from __future__ import annotations
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
@@ -76,6 +76,9 @@ TABLES: dict[str, str] = {
             status      TEXT    NOT NULL DEFAULT 'open',  -- open | closed
             strategy    TEXT,                      -- ema_trend_stack | orb_breakout | ...
             r_multiple  REAL,                      -- pnl en unidades de riesgo (R)
+            observe     INTEGER NOT NULL DEFAULT 0, -- 1 = forward-test sin capital (no cuenta en PnL)
+            exit_reason TEXT,                      -- stop | tp | timeout | ...
+            cost_audit  TEXT,                      -- JSON: R descompuesto (precio/slip/fees/funding)
             created_at  INTEGER NOT NULL
         )
     """,
@@ -189,6 +192,10 @@ TABLES: dict[str, str] = {
 MIGRATIONS: list[str] = [
     "ALTER TABLE trades ADD COLUMN strategy TEXT",
     "ALTER TABLE trades ADD COLUMN r_multiple REAL",
+    # v6 — gate observe + auditoría de costes de salida (FORWARD_REVIEW #1/#3)
+    "ALTER TABLE trades ADD COLUMN observe INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE trades ADD COLUMN exit_reason TEXT",
+    "ALTER TABLE trades ADD COLUMN cost_audit TEXT",
 ]
 
 # Índices para consultas frecuentes (frontend / calibración).

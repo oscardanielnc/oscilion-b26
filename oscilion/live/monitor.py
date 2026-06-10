@@ -14,13 +14,14 @@ Reusa la misma lógica de señal que el backtest (sin divergencia).
 from __future__ import annotations
 
 import logging
+import time
 
 import numpy as np
 
 from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS
 from oscilion.data import fetch, store
-from oscilion.live import forward
+from oscilion.live import forward, guards
 from oscilion.notify import notify
 from oscilion.persistence import db
 from oscilion.strategies import all_assignments, library as S
@@ -106,6 +107,14 @@ class LiveMonitor:
                 except Exception:
                     log.exception("refresh %s", sym)
 
+        # forward ANTES de evaluar señales: el gate de validación lee de
+        # forward_results, así el primer tick ya decide con datos frescos.
+        if self.forward_every_ticks and self._ticks % self.forward_every_ticks == 1:
+            try:
+                forward.refresh()
+            except Exception:
+                log.exception("forward refresh")
+
         for sym, a in self.assignments:
             try:
                 alerts.extend(self._step_one(sym, a))
@@ -115,12 +124,6 @@ class LiveMonitor:
             finally:
                 db.save_monitor_state(self._key(sym, a.strategy),
                                       self.states[(sym, a.strategy)].to_dict())
-
-        if self.forward_every_ticks and self._ticks % self.forward_every_ticks == 1:
-            try:
-                forward.refresh()
-            except Exception:
-                log.exception("forward refresh")
 
         # snapshot conciso del observador: por cadencia (≈horario) o en cada cambio
         # (cuando hubo alerta de entrada/salida) → rastro auditable aunque no opere.
@@ -166,6 +169,14 @@ class LiveMonitor:
             if st.position is None:
                 cand = S.REGISTRY[a.strategy]["fn"](ctx, i, a.params)
                 if cand:
+                    # señal vencida: tras downtime/refresh fallido la vela es vieja →
+                    # precio de referencia vencido y filtros de sesión ya no valen.
+                    if not guards.is_fresh(sig_close, int(time.time() * 1000)):
+                        age_min = (int(time.time() * 1000) - sig_close) // 60_000
+                        db.log_event("WARN", "live.monitor",
+                                     f"{sym} {a.strategy}: señal vencida ({age_min}m > "
+                                     f"{config.max_signal_age_min}m) — no se entra")
+                        return alerts
                     r = self._open(sym, a, cand, sig_close)
                     if r:
                         alerts.append(r)
@@ -176,17 +187,44 @@ class LiveMonitor:
         # riesgo, fee de entrada → así los trades del monitor coinciden con la validación.
         side = cand["side"]
         entry = DEFAULT_COSTS.fill_price(float(cand["entry_ref"]), side, is_entry=True, maker=False)
-        stop, tp = float(cand["stop"]), float(cand["tp"])
+        stop = float(cand["stop"])
+        tp = float(cand["tp"]) if cand.get("tp") is not None else None   # None = runner
         risk_dist = (entry - stop) if side == "long" else (stop - entry)
         if risk_dist <= 0:
             return None
         stop_pct = risk_dist / entry
+        if not guards.stop_pct_ok(stop_pct):
+            db.log_event("WARN", "live.monitor",
+                         f"{sym} {a.strategy}: stop_pct {stop_pct:.4%} < piso "
+                         f"{config.min_stop_pct:.2%} — no se abre (notional absurdo)")
+            return None
+
+        # gate de validación (FORWARD_REVIEW #1): sin evidencia local suficiente
+        # (n, exp_R del motor honesto) el trade se degrada a observe (sin capital).
+        observe, gate_reason = guards.gate_decision(
+            db.get_forward_backtest(sym, a.strategy), a.observe_only)
+        if observe and not a.observe_only:
+            db.log_event("WARN", "live.monitor",
+                         f"{sym} {a.strategy}: degradado a observe — {gate_reason}")
+
+        # veto cruzado (FORWARD_REVIEW #2): 1 posición CON CAPITAL por símbolo.
+        if not observe:
+            other = guards.capital_position_on_symbol(self.states, sym)
+            if other is not None:
+                db.log_event("INFO", "live.monitor",
+                             f"{sym} {a.strategy}: veto símbolo — capital ya abierto en {other}")
+                db.log_decision(sym, "no-entrar", f"veto símbolo: posición abierta ({other})")
+                return None
+
         risk_amt = self.capital * config.risk_per_trade
         notional = risk_amt / stop_pct
         entry_fee = DEFAULT_COSTS.fee(notional, maker=False)
         pid = db.log_prediction(sym, score=(80 if a.conviction == "alta" else 60),
-                                stop=stop, tp=tp, components={"strategy": a.strategy, "side": side})
-        db.log_decision(sym, "entrar", f"{a.strategy} {side} entry≈{entry:.6g}", prediction_id=pid)
+                                stop=stop, tp=tp,
+                                components={"strategy": a.strategy, "side": side,
+                                            "observe": observe})
+        accion = "entrar-observe" if observe else "entrar"
+        db.log_decision(sym, accion, f"{a.strategy} {side} entry≈{entry:.6g}", prediction_id=pid)
         st = self.states[(sym, a.strategy)]
         # timeout = max_hold barras de señal (igual que el engine honesto) → la posición
         # NO vive para siempre; se cierra a mercado al vencer el horizonte.
@@ -195,12 +233,15 @@ class LiveMonitor:
         st.position = {"side": side, "entry": entry, "stop": stop, "init_stop": stop, "tp": tp,
                        "entry_ts": sig_close, "stop_pct": stop_pct, "notional": notional,
                        "entry_fee": entry_fee, "risk_amt": risk_amt, "strategy": a.strategy,
-                       "deadline_ts": deadline_ts}
+                       "deadline_ts": deadline_ts, "observe": observe}
         st.last_15m_ts = sig_close
-        msg = (f"🟢 ENTRA {sym} {side.upper()} [{a.strategy}] @ {entry:.6g} | "
-               f"stop {stop:.6g} tp {tp:.6g}")
+        tag = "👁️ OBSERVA" if observe else "🟢 ENTRA"
+        tp_txt = f"{tp:.6g}" if tp is not None else "runner"
+        msg = (f"{tag} {sym} {side.upper()} [{a.strategy}] @ {entry:.6g} | "
+               f"stop {stop:.6g} tp {tp_txt}")
         notify(msg, "INFO", "live.monitor")
-        return {"kind": "ENTRA", "sym": sym, "strategy": a.strategy, "msg": msg}
+        return {"kind": "ENTRA_OBS" if observe else "ENTRA",
+                "sym": sym, "strategy": a.strategy, "msg": msg}
 
     def _manage(self, sym: str, st: _PosState) -> dict | None:
         pos = st.position
@@ -213,20 +254,21 @@ class LiveMonitor:
         if not mask.any():
             return None
         hi = m15["high"].to_numpy(); lo = m15["low"].to_numpy(); cl = m15["close"].to_numpy()
-        side, stop, tp = pos["side"], pos["stop"], pos["tp"]
+        side, stop = pos["side"], pos["stop"]
+        tp_lvl = S.tp_barrier(pos["tp"], side)        # None = runner → ±inf, nunca dispara
         deadline = pos.get("deadline_ts")            # None en posiciones de formato previo
         for k in np.flatnonzero(mask):
             st.last_15m_ts = int(ts[k])
             if side == "long":
-                hit_stop, hit_tp = lo[k] <= stop, hi[k] >= tp
+                hit_stop, hit_tp = lo[k] <= stop, hi[k] >= tp_lvl
             else:
-                hit_stop, hit_tp = hi[k] >= stop, lo[k] <= tp
+                hit_stop, hit_tp = hi[k] >= stop, lo[k] <= tp_lvl
             if hit_stop:                              # pesimista: stop antes que tiempo/tp
                 return self._close(sym, st, stop, int(ts[k]), "stop")
             if deadline is not None and ts[k] >= deadline:
                 return self._close(sym, st, float(cl[k]), int(ts[k]), "timeout")
             if hit_tp:
-                return self._close(sym, st, tp, int(ts[k]), "tp")
+                return self._close(sym, st, tp_lvl, int(ts[k]), "tp")
         return None
 
     def _close(self, sym: str, st: _PosState, exit_px: float, exit_ts: int, reason: str) -> dict:
@@ -242,17 +284,36 @@ class LiveMonitor:
                                  for r in fdf.loc[m, "funding_rate"]))
         pnl, exit_fill = DEFAULT_COSTS.realized(side, pos["entry"], exit_px, pos["notional"],
                                                 pos["entry_fee"], maker_exit=maker_exit, funding_total=fund)
-        R = pnl / pos["risk_amt"] if pos["risk_amt"] > 0 else 0.0
-        db.log_trade(sym, side, config.mode.value, entry=pos["entry"], stop=pos["init_stop"],
-                     tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=pos["notional"],
-                     strategy=pos["strategy"], r_multiple=R, pnl=pnl, funding=fund)
+        risk_amt = pos["risk_amt"]
+        R = pnl / risk_amt if risk_amt > 0 else 0.0
+        observe = bool(pos.get("observe", False))
+        # AUDITORÍA de costes de salida (FORWARD_REVIEW #3): descompone el R en
+        # precio puro / slippage de salida / fees / funding — responde con datos
+        # si "los stops realizan peor que −1R" viene del modelo o de otra cosa.
+        notional, entry_px = pos["notional"], pos["entry"]
+        dirn = 1.0 if side == "long" else -1.0
+        exit_fee = DEFAULT_COSTS.fee(notional, maker=maker_exit)
+        audit = None
+        if risk_amt > 0:
+            audit = {
+                "r_gross": (exit_px - entry_px) / entry_px * dirn * notional / risk_amt,
+                "r_slip_exit": (exit_fill - exit_px) / entry_px * dirn * notional / risk_amt,
+                "r_fee_entry": -pos["entry_fee"] / risk_amt,
+                "r_fee_exit": -exit_fee / risk_amt,
+                "r_funding": -fund / risk_amt,
+            }
+        db.log_trade(sym, side, config.mode.value, entry=entry_px, stop=pos["init_stop"],
+                     tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=notional,
+                     strategy=pos["strategy"], r_multiple=R, pnl=pnl, funding=fund,
+                     observe=observe, exit_reason=reason, cost_audit=audit)
         if reason == "stop":
             kind, icon = "SAL", "🔴"
         elif reason == "timeout":
             kind, icon = "CIERRE_TIEMPO", "⏱️"
         else:
             kind, icon = "TOMA_GANANCIA", "🟢"
-        msg = f"{icon} {kind} {sym} [{pos['strategy']}] @ {exit_fill:.6g} | {R:+.2f}R ({reason})"
+        obs_tag = " (observe)" if observe else ""
+        msg = f"{icon} {kind}{obs_tag} {sym} [{pos['strategy']}] @ {exit_fill:.6g} | {R:+.2f}R ({reason})"
         notify(msg, "INFO", "live.monitor")
         st.position = None
         return {"kind": kind, "sym": sym, "strategy": pos["strategy"], "msg": msg, "R": R}
@@ -264,6 +325,7 @@ class LiveMonitor:
             out.append({"sym": sym, "strategy": strat,
                         "in_trade": st.position is not None,
                         "position": ({"side": st.position["side"], "entry": st.position["entry"],
-                                      "stop": st.position["stop"], "tp": st.position["tp"]}
+                                      "stop": st.position["stop"], "tp": st.position["tp"],
+                                      "observe": st.position.get("observe", False)}
                                      if st.position else None)})
         return out
