@@ -1,7 +1,8 @@
 # Estado del proyecto Oscilion — v0.6.0-pilot
 
-**Actualizado:** 2026-06-03. Lee también `STRATEGY_MAP.md` (dirección), `VALIDATION_R1_R2.md`,
-`BTC_SALVAGE.md` (rescate), `B_PORTFOLIO_PLAN.md` (lo que falta afinar).
+**Actualizado:** 2026-06-10 (post primer ciclo forward + endurecimiento de proceso).
+Lee también `FORWARD_REVIEW.md` (bitácora forward + diseños de las guardas),
+`STRATEGY_MAP.md` (dirección), `B_PORTFOLIO_PLAN.md`.
 
 ---
 
@@ -10,107 +11,106 @@
 **Oscilion = observador multi-moneda que asigna a CADA moneda la estrategia que se le
 validó, deja correr ganadores, y solo opera donde hay edge demostrado.** Convicción > cantidad.
 
-**Núcleo v1 (pilot):**
-| Moneda | Estrategia | Por qué |
-|---|---|---|
-| BTC, BNB, TRX | **EMA_TREND_STACK** (tp_r=4) | trenders limpios; positivos full+OOS+WF |
-| LINK, DOT, TRX | **ORB_BREAKOUT** (tp_r=4) | breakout rescata alts; positivos full+OOS+WF |
+**Portfolio v1 (9 monedas, 12 series):**
+| Moneda | Estrategia | Capital | Notas |
+|---|---|---|---|
+| BTC, BNB, TRX | EMA_TREND_STACK (tp_r=4) | ✅ (si pasa gate) | trenders; full+OOS+WF positivos |
+| LINK, DOT, TRX | ORB_BREAKOUT (tp_r=4) | ✅ (si pasa gate) | breakout rescata alts |
+| ETH, AVAX | VWAP_ANCHOR (tp_r=2.5) | ✅ (si pasa gate) | R3c; diversifican |
+| BTC, TRX, XRP, DOGE | VWAP_ANCHOR | 👁️ observe | WF dudoso (full/test neg) |
+| TRX | BREAK_RETEST | 👁️ observe | n=1 local; confirmar |
 
-Fuera por ahora (sin edge limpio): SOL, ETH, AVAX. Marginales en observación: ADA, DOGE, XRP, LTC.
-
----
+**"Capital" siempre condicionado al gate dinámico** (ver §3): sin n≥30 y exp_R>0 en el
+backtest LOCAL, la serie opera como observe (sin capital) aunque la asignación diga capital.
 
 ## 2. Arquitectura (estado actual)
 
 ```
 oscilion/
-├── strategies/          ★ NÚCLEO de primera clase (fuente única de señal)
-│   ├── library.py       4 estrategias puras (EMA_STACK, ORB, momentum, break_retest)
+├── strategies/          ★ fuente única de señal
+│   ├── library.py       5 estrategias puras + tp_barrier (runner = tp None)
 │   ├── context.py       build_ctx multi-TF (backtest Y live) — sin look-ahead
-│   ├── assignment.py    PORTFOLIO: moneda→estrategia(s)+params (la DIRECCIÓN)
-│   └── portfolio.py     capa de cartera (scaffold B: weights/leverage/límites)
+│   ├── assignment.py    PORTFOLIO: moneda→estrategia(s)+params+observe_only
+│   ├── portfolio.py     weights/clusters/límites (tuned.py de Fase B)
+│   └── tuned.py         GENERADO fase B: equal-weight, maxc=3, clúster=2
 ├── live/                ★ FASE A (validación con datos reales)
-│   ├── forward.py       backtest vs forward por moneda×estrategia → BD (log conciso)
-│   └── monitor.py       dry-run: alertas ENTRA/SAL + trades virtuales + estado
-├── backtest/
-│   ├── engine_strat.py  motor honesto (señal coarse, salida 15m pesimista, costos, R)
-│   ├── resample.py      1h→2h/4h causal
-│   ├── engine.py·costs·metrics·report   (research/validación previa)
-├── data/                fetch·store·universe·pipeline (ccxt, parquet+DB, sin look-ahead)
-├── features/            indicators (ATR/EMA/RSI/BB/VWAP/ADX...) · ranges·regime·reversion (research)
-├── risk/                sizing (L=2%/stop)·stops·allocation
-├── persistence/         db (SQLite WAL, append-only, migraciones) · models (schema v3)
-├── api/app.py           /health /status /state /forward /trades /candidates /calibration /data /events
-├── orchestrator.py      loop resiliente 24/7 → LiveMonitor + publica state.json
-├── circuit_breaker · notify · logging_setup
-research/                campañas de validación (edge_campaign, *_validation, correlation_map...)
-docs/                    VISION · STRATEGY_MAP · VALIDATION_R1_R2 · BTC_SALVAGE · B_PORTFOLIO_PLAN · este
+│   ├── monitor.py       dry-run: señales→trades virtuales; TODAS las guardas (§3)
+│   ├── guards.py        ★ guardas PURAS: gate, vetos, freno diario, stale, stop-floor
+│   ├── forward.py       backtest vs forward por serie → forward_results (BD)
+│   ├── signals.py       vista curada para frontend
+│   └── export.py        reporte diario md/json (capital vs observe separados)
+├── backtest/            engine_strat (motor honesto) · costs (compartido con live) · resample
+├── data/                fetch (ccxt + timeout explícito) · store · universe · pipeline
+├── persistence/         db · models — **schema v6** (trades: observe, exit_reason, cost_audit)
+├── api/app.py           /signals /trades /forward /alerts /export /portfolio /events ...
+├── orchestrator.py      loop 24/7 resiliente + warn de tick lento + backup BD diario
+└── circuit_breaker · notify · logging_setup
 ```
 
-**Calidad/robustez:** SQLite WAL + lock + **busy_timeout** (concurrencia API↔orquestador),
-escrituras atómicas (parquet, state.json), cada tick en try/except (no muere), migraciones
-idempotentes, estrategia = fuente única, **backup diario de la BD** (VACUUM INTO, data/backups/),
-**ejecución compartida engine↔monitor** (`costs.realized` → los trades del monitor coinciden con
-la validación forward), **tests** (`pytest`, 7 smoke) incl. guardián que impide que producción
-importe research.
+**Tests: 23 (pytest)** — smoke (imports, riesgo, resampleo causal, separación
+producción/research, universo único) + guardas (gate, vetos, freno, stale, tp runner, piso stop).
 
-### Producción vs Research (separación, enforced por test)
-- **Producción (path vivo):** `config`, `persistence/{db,models}`, `data/{fetch,store,pipeline,universe}`,
-  `features/indicators`, `strategies/{library,context,assignment,portfolio,tuned}`,
-  `backtest/{engine_strat,resample,costs,portfolio_sim}`, `live/{monitor,forward,signals,export}`,
-  `signals/maker_taker`, `orchestrator`, `circuit_breaker`, `notify`, `logging_setup`, `api/app`.
-- **Research/legacy (NO en producción):** `analysis` (reversión), `backtest/{engine,metrics,report}`,
-  `scoring/conviction`, `features/{ranges,regime,reversion}`, `risk/{sizing,allocation,stops}`,
-  `signals/entry`. Los usan los scripts de `research/`. `test_production_no_importa_research` lo verifica.
+## 3. Guardas de proceso (orden de evaluación al abrir) — TODAS enforced en monitor
 
----
+Nacen del primer ciclo forward (−4.07R, del cual −3.2R fue de combos sin validar; ver
+`FORWARD_REVIEW.md`). Cada bloqueo deja evento en BD (visible en /alerts y export).
 
-## 3. Fase A — validación forward (ACTIVA)
+1. **Señal vencida** (`max_signal_age_min=30`): vela de señal vieja (downtime/refresh
+   fallido) → no entrar a precio vencido.
+2. **Piso de stop** (`min_stop_pct=0.2%`): stop→0 dispara el notional. Idéntico en engine.
+3. **Gate de validación** (`gate_min_n=30`, `gate_min_exp_r=0`): capital solo si el
+   backtest LOCAL (forward_results) lo respalda; si no → degrada a **observe**
+   (trade virtual sin capital, `trades.observe=1`, fuera del PnL, sigue sumando stats).
+4. **Veto por símbolo**: máx 1 posición CON capital por símbolo (cualquier dirección).
+5. **Límites de cartera (Fase B)**: máx 3 posiciones con capital, máx 2 por clúster —
+   el esquema con el que se validó el portfolio (antes NO se aplicaba en vivo).
+6. **Freno diario** (`max_daily_loss=6%`): PnL cerrado del día (UTC) ≤ −6% del capital →
+   sin nuevas entradas con capital hasta 00:00 UTC + ntfy CRITICAL (1 aviso/día).
 
-Cada implementación que necesite validación deja **logs concisos en BD consultables desde el
-frontend** (directiva permanente). Hoy:
-- `forward_results` (tabla): por moneda×estrategia, `backtest` vs `forward` (n, winrate, exp_R).
-- `trades` (status=closed): trades virtuales con `strategy` y `r_multiple`.
-- API: `/forward`, `/trades`, `/state`. CLI diario: `python -m oscilion.live.forward`.
-- `inception` = 2026-01-01 (holdout pre-deploy de auto-test); **al desplegar en la VM se fija a
-  la fecha de despliegue** y el forward pasa a ser datos reales no vistos.
+**Auditoría de costes**: cada cierre persiste `cost_audit` (R = r_gross + r_slip_exit +
+r_fee_entry + r_fee_exit + r_funding) → responde con datos si los stops realizan peor que
+−1R por modelo o por otra cosa. Hallazgo: monitor y backtest comparten `costs.realized`,
+el −1.04/−1.13R observado YA está modelado.
 
-**Auto-test del holdout 2026 (pre-deploy):** BTC/TRX/LINK aguantan fuerte; BNB y DOT flaquean
-(n chico) — se vigilará en vivo.
-
----
-
-## 4. Cómo correr
+## 4. Cómo correr / desplegar
 
 ```powershell
-python -m oscilion                  # orquestador 24/7 (monitor dry-run + alertas + forward)
-python -m oscilion.api              # API para el frontend
-python -m oscilion.live.forward     # revisión diaria backtest vs forward
-python -m oscilion.data sync --days 1095   # refrescar histórico
+python -m oscilion                  # orquestador 24/7
+python -m oscilion.api              # API + frontend
+python -m oscilion.live.forward     # revisión backtest vs forward
+python -m pytest tests/ -q          # 23 tests
 ```
+Deploy: Oscar hace `git push` → en la VM `bash /opt/oscilion/deploy.sh`. La BD migra a
+schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://213.35.121.9:8787.
 
----
+## 5. Hecho ✅
+- Pilot v1 + frontend + VM Oracle (dry-run) + ntfy + export diario.
+- 2026-06-08/10: primer ciclo forward cerrado y revisado (FORWARD_REVIEW.md).
+- 2026-06-10 (`2980f85`): gate de validación + observe enforced + veto símbolo + señal
+  vencida + tp runner None + piso de stop + cost_audit (schema v6).
+- 2026-06-10 (este commit): límites de cartera Fase B en vivo + freno diario −6% +
+  timeout ccxt explícito + warn tick lento + estado solo se persiste tras step exitoso.
 
-## 5. Hecho ✅ (pilot v1 + endurecimiento)
-- Dirección (2 motores por moneda), refactor, Fase A (forward + monitor dry-run), Fase B (cartera v1).
-- Frontend v1 (Resumen · Señales · **Operaciones** · Validación forward) + descarga de logs por rango.
-- Desplegado en VM Oracle (dry-run, dashboard http://213.35.121.9:8787, ntfy oscar-oscilion-b26).
-- Tier 1 (busy_timeout, backup BD diario, tests pytest, universo único) + Tier 2 (consistencia
-  monitor↔engine, separación research/producción).
-- API: `/status /signals /portfolio /alerts /forward /trades /export /state /events /data /candidates`.
+## 6. Qué esperar tras el deploy + pendiente
 
-## 6. Próxima sesión — pendiente y a vigilar
-1. **DESPLEGAR el último commit** (fix SQLITE_BUSY retry + pestaña Operaciones): `git push` (Oscar)
-   + `bash /opt/oscilion/deploy.sh`. Sin esto, esos cambios no están vivos.
-2. **Verificar persistencia de trades**: el trade TRX del 03/06 se perdió por SQLITE_BUSY (pre
-   busy_timeout). Confirmar que los próximos SÍ quedan en `/trades` y en el export.
-3. **Revisar el 1er trade persistido**: su **R** y **hora** — TRX +0.08% casi instantáneo sugiere
-   micro-breakout en TRX plano → evaluar **piso de ATR/movimiento mínimo**; y confirmar que el
-   **filtro de sesión EU/NY del ORB** se respeta (la alerta llegó ~01:48 UTC, fuera de [8,21)).
-4. **Acumular forward** y comparar vs backtest por moneda (keep/remove/fix/improve).
-5. **Explorar (con datos forward, validando)**: trailing/parciales, RR por moneda.
-6. **Limpiezas**: quitar tablas sin uso (`market_snapshots`, `calibration`); **CI en GitHub**
-   (pytest en checkout limpio → blinda la clase de bug del `.gitignore`).
-7. **Futuro mayor**: más estrategias/monedas, SOL/ETH/AVAX, VWAP_ANCHOR, ejecución maker, paper/live.
+**Tras desplegar, es NORMAL ver:**
+- Eventos "degradado a observe" en monedas nuevas con histórico local corto (ETH/AVAX
+  posiblemente) — es el gate funcionando; se gradúan solos cuando el backfill crece.
+- Export diario con dos tablas: trades CON capital (cuentan) y observe (no cuentan).
+- Alertas 👁️ OBSERVA en el móvil además de 🟢 ENTRA.
 
-> Docs clave: `STRATEGY_MAP.md` (dirección) · `B_PORTFOLIO_PLAN.md` · `DEPLOY.md` · `BTC_SALVAGE.md` · `VALIDATION_R1_R2.md`.
+**Criterio vigente: ≥50 trades forward con capital (gateados) antes de cualquier
+veredicto de edge. No tocar parámetros ni añadir estrategias mientras tanto.**
+
+**Backlog priorizado:**
+- **B (infra):** retención BD (90d snapshots/events) + VACUUM mensual; StartLimitBurst=5
+  en systemd; chequeo de disco; ORDER BY ts en /events.
+- **C (deuda):** borrar ~700 LOC research/legacy (features/{ranges,regime,reversion},
+  scoring, signals/entry, backtest/{engine,metrics,report}); mover costs.py fuera de
+  backtest/; tests de integración (rehidratación, breaker, gate round-trip); CI GitHub.
+- **D (validación — decide el target):** semáforo semanal backtest-vs-forward automático
+  (ntfy domingos); regla explícita de graduación/demote de observe (p.ej. n_fwd≥20 y
+  exp_R>0 gradúa; sum_R<−8R demota); al pasar a fills reales, comparar fill vs cost_audit
+  y recalibrar slippage; reabrir maker-entry (R4).
+
+> Docs clave: `FORWARD_REVIEW.md` · `STRATEGY_MAP.md` · `B_PORTFOLIO_PLAN.md` · `DEPLOY.md`.

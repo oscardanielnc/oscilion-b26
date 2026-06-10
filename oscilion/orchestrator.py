@@ -80,6 +80,12 @@ class Orchestrator:
 
                 # dormir lo que reste del intervalo, interrumpible
                 elapsed = time.monotonic() - started
+                if elapsed > config.tick_seconds:
+                    # tick más largo que el intervalo: red lenta o BD pesada.
+                    # Rastro en BD para verlo desde el frontend (eventos WARN).
+                    log.warning("tick lento: %.1fs > %ds", elapsed, config.tick_seconds)
+                    db.log_event("WARN", "orchestrator",
+                                 f"tick lento: {elapsed:.1f}s > {config.tick_seconds}s")
                 self._sleep(max(0.0, config.tick_seconds - elapsed))
         finally:
             self.shutdown()

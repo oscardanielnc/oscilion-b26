@@ -94,6 +94,9 @@ class Config:
 
     # --- loop ---
     tick_seconds: int = _env_int("OSCILION_TICK_SECONDS", 60)
+    # timeout de red por llamada ccxt (ms): acota cuánto puede colgar un fetch
+    # un tick (explícito y tunable; sin esto dependemos del default de la lib).
+    ccxt_timeout_ms: int = _env_int("OSCILION_CCXT_TIMEOUT_MS", 10_000)
 
     # --- INVARIANTES de riesgo (RISK_MODEL.md) ---
     risk_per_trade: float = _env_float("OSCILION_RISK_PER_TRADE", 0.02)   # pérdida máx por trade
