@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS, CostModel
 from oscilion.data import store
 from oscilion.strategies import library as S
@@ -106,10 +107,14 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         side = cand["side"]
         maker = p.maker_entry
         entry_px = p.costs.fill_price(eo[ei], side, is_entry=True, maker=maker)
-        stop, tp = cand["stop"], cand["tp"]
+        stop, tp = cand["stop"], cand["tp"]            # tp=None = runner (sin TP)
+        tp_lvl = S.tp_barrier(tp, side)                # ±inf si runner: nunca dispara
         # re-validar geometría con el fill real
         risk_dist = (entry_px - stop) if side == "long" else (stop - entry_px)
         if risk_dist <= 0:
+            continue
+        # piso de stop (= monitor): riesgo fijo / stop→0 dispara el notional
+        if risk_dist / entry_px < config.min_stop_pct:
             continue
         risk_amt = equity * p.risk
         notional = risk_amt / (risk_dist / entry_px)
@@ -159,16 +164,16 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
             while k < n_exit and ets[k] <= deadline:
                 hi, lo = eh[k], el[k]
                 if side == "long":
-                    hit_stop, hit_tp = lo <= stop, hi >= tp
+                    hit_stop, hit_tp = lo <= stop, hi >= tp_lvl
                 else:
-                    hit_stop, hit_tp = hi >= stop, lo <= tp
+                    hit_stop, hit_tp = hi >= stop, lo <= tp_lvl
                 if hit_stop:
                     exit_px, exit_reason = stop, "stop"; break
                 ts = _time_stop(k)
                 if ts:
                     exit_px, exit_reason = ts; break
                 if hit_tp:
-                    exit_px, exit_reason = tp, "tp"; break
+                    exit_px, exit_reason = tp_lvl, "tp"; break
                 k += 1
         if exit_px is None:                  # timeout o fin de datos
             k = min(k, n_exit - 1)

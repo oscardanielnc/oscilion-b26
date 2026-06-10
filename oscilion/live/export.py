@@ -36,7 +36,8 @@ def collect(from_ms: int, to_ms: int) -> dict:
     con = db.get_connection()
     with db._lock:
         trades = [dict(r) for r in con.execute(
-            "SELECT exit_ts, sym, strategy, side, entry, exit, r_multiple, pnl FROM trades "
+            "SELECT exit_ts, sym, strategy, side, entry, exit, r_multiple, pnl,"
+            " COALESCE(observe,0) observe, exit_reason, cost_audit FROM trades "
             "WHERE status='closed' AND exit_ts>=? AND exit_ts<? ORDER BY exit_ts", (from_ms, to_ms))]
         alerts = [dict(r) for r in con.execute(
             "SELECT ts, msg FROM events WHERE module='live.monitor' AND ts>=? AND ts<? ORDER BY ts",
@@ -97,20 +98,44 @@ def build_markdown(date_from: str, date_to: str) -> str:
         er = f"{r['exp_r']:+.3f}" if r["exp_r"] is not None else "—"
         L.append(f"| {r['sym'].split('/')[0]} | {r['strategy']} | {r['scope']} | {r['n']} | {wr} | {er} |")
 
-    L.append(f"\n## Trades cerrados en el rango ({len(d['trades'])})")
-    if d["trades"]:
-        L.append("| Cierre (Lima) | Moneda | Estrategia | Lado | R | PnL |")
-        L.append("|---|---|---|---|--:|--:|")
-        for t in d["trades"]:
+    capital = [t for t in d["trades"] if not t.get("observe")]
+    observe = [t for t in d["trades"] if t.get("observe")]
+
+    def _audit_txt(t: dict) -> str:
+        try:
+            a = json.loads(t["cost_audit"]) if t.get("cost_audit") else None
+        except Exception:
+            a = None
+        if not a:
+            return "—"
+        return (f"px {a['r_gross']:+.2f} · slip {a['r_slip_exit']:+.3f} · "
+                f"fees {a['r_fee_entry'] + a['r_fee_exit']:+.3f} · fund {a['r_funding']:+.3f}")
+
+    def _tabla(rows: list[dict]) -> None:
+        L.append("| Cierre (Lima) | Moneda | Estrategia | Lado | R | PnL | Salida | Coste (R: px/slip/fees/fund) |")
+        L.append("|---|---|---|---|--:|--:|---|---|")
+        for t in rows:
             L.append(f"| {_lima(t['exit_ts'])} | {t['sym'].split('/')[0]} | {t['strategy']} | "
-                     f"{t['side']} | {t['r_multiple']:+.2f} | {t['pnl']:+.2f} |")
+                     f"{t['side']} | {t['r_multiple']:+.2f} | {t['pnl']:+.2f} | "
+                     f"{t.get('exit_reason') or '—'} | {_audit_txt(t)} |")
+
+    L.append(f"\n## Trades cerrados CON capital ({len(capital)})")
+    if capital:
+        _tabla(capital)
         L.append("\n**Resumen por estrategia (para validar targets):**")
         L.append("| Estrategia | n | winrate | R medio |")
         L.append("|---|--:|--:|--:|")
-        for s in _trade_summary(d["trades"]):
+        for s in _trade_summary(capital):
             L.append(f"| {s['strategy']} | {s['n']} | {s['winrate']*100:.0f}% | {s['avg_R']:+.3f} |")
     else:
-        L.append("_Sin trades cerrados en el rango._")
+        L.append("_Sin trades con capital en el rango._")
+
+    L.append(f"\n## Forward-test SIN capital — observe ({len(observe)})")
+    L.append("_No cuentan en el PnL: combos sin validación local suficiente (gate) o en observación._")
+    if observe:
+        _tabla(observe)
+    else:
+        L.append("_Sin trades observe en el rango._")
 
     L.append(f"\n## Actividad del observador (snapshots del rango)")
     if d["snapshots"]:
@@ -144,5 +169,6 @@ def build_json(date_from: str, date_to: str) -> str:
     from_ms, to_ms = range_ms(date_from, date_to)
     d = collect(from_ms, to_ms)
     d["range"] = {"from": date_from, "to": date_to, "from_ms": from_ms, "to_ms": to_ms}
-    d["trade_summary"] = _trade_summary(d["trades"])
+    d["trade_summary"] = _trade_summary([t for t in d["trades"] if not t.get("observe")])
+    d["trade_summary_observe"] = _trade_summary([t for t in d["trades"] if t.get("observe")])
     return json.dumps(d, default=str, ensure_ascii=False, indent=2)

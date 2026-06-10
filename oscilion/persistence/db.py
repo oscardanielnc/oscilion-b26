@@ -157,10 +157,30 @@ def log_decision(
 def log_trade(sym: str, side: str, mode: str, **f: Any) -> Optional[int]:
     f.setdefault("ts", _now_ms())
     f.update(sym=sym, side=side, mode=mode)
+    if "cost_audit" in f:
+        f["cost_audit"] = _jdump(f["cost_audit"])
+    if "observe" in f:
+        f["observe"] = int(bool(f["observe"]))
     allowed = {"ts", "sym", "side", "mode", "entry", "stop", "tp", "leverage",
                "size", "exit", "exit_ts", "pnl", "fees", "funding", "status",
-               "strategy", "r_multiple"}
+               "strategy", "r_multiple", "observe", "exit_reason", "cost_audit"}
     return _insert("trades", {k: v for k, v in f.items() if k in allowed})
+
+
+def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
+    """Stats del backtest LOCAL (motor honesto) para el gate de validación.
+    None si aún no hay snapshot (forward.refresh no corrió) → el gate bloquea."""
+    try:
+        with _lock:
+            row = get_connection().execute(
+                "SELECT n, win_rate, exp_r, sum_r FROM forward_results"
+                " WHERE sym=? AND strategy=? AND scope='backtest'",
+                (sym, strategy),
+            ).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        log.exception("Fallo get_forward_backtest %s %s", sym, strategy)
+        return None
 
 
 def log_params(version: str, params: dict) -> Optional[int]:

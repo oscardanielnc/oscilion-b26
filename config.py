@@ -101,6 +101,21 @@ class Config:
     min_rr: float = _env_float("OSCILION_MIN_RR", 2.5)                    # filtro de entrada
     taker_fee: float = _env_float("OSCILION_TAKER_FEE", 0.00036)          # 0.036%
     max_concurrent: int = _env_int("OSCILION_MAX_CONCURRENT", 3)          # ~3 monedas
+    # Piso de distancia de stop: por debajo el notional/apalancamiento se dispara
+    # (riesgo fijo / stop→0). Con stops ≥1×ATR casi nunca aplica: es red de seguridad.
+    min_stop_pct: float = _env_float("OSCILION_MIN_STOP_PCT", 0.002)      # 0.2%
+
+    # --- gate de validación (FORWARD_REVIEW #1): un combo sym×estrategia solo
+    # opera con capital si SU backtest local (motor honesto, forward_results)
+    # tiene muestra y edge: n >= gate_min_n y exp_r > gate_min_exp_r.
+    # Si no pasa, se degrada a observe (alertas+stats, sin capital).
+    gate_min_n: int = _env_int("OSCILION_GATE_MIN_N", 30)
+    gate_min_exp_r: float = _env_float("OSCILION_GATE_MIN_EXP_R", 0.0)
+
+    # --- señal vencida (FORWARD_REVIEW sesión/stale): si la vela de señal cerró
+    # hace más de esto, NO se entra (el precio de referencia ya es viejo; pasa
+    # tras downtime o refresh de datos fallido).
+    max_signal_age_min: int = _env_int("OSCILION_MAX_SIGNAL_AGE_MIN", 30)
 
     # --- circuit breaker (límites duros) ---
     max_daily_loss: float = _env_float("OSCILION_MAX_DAILY_LOSS", 0.06)   # -6% del capital/día

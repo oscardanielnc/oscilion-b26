@@ -144,10 +144,20 @@ def recent_trades(limit: int = 50) -> list[dict]:
     limit = max(1, min(limit, 500))
     with db._lock:
         rows = db.get_connection().execute(
-            "SELECT ts, exit_ts, sym, side, strategy, entry, exit, stop, tp, r_multiple, pnl, status"
+            "SELECT ts, exit_ts, sym, side, strategy, entry, exit, stop, tp, r_multiple, pnl, status,"
+            " COALESCE(observe,0) observe, exit_reason, cost_audit"
             " FROM trades WHERE status='closed' ORDER BY COALESCE(exit_ts, ts) DESC LIMIT ?", (limit,)
         ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("cost_audit"):
+            try:
+                d["cost_audit"] = json.loads(d["cost_audit"])
+            except Exception:
+                pass
+        out.append(d)
+    return out
 
 
 @app.get("/candidates")
