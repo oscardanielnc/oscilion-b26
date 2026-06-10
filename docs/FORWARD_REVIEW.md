@@ -59,6 +59,15 @@
    `max_signal_age_min` 30m (tras downtime/refresh fallido no se entra a precio viejo — causa
    probable del ORB fuera de sesión: el filtro evalúa la hora de la VELA, no la actual).
 
+5. **Bloque A (misma sesión, segunda tanda):** los **límites de Fase B por fin se aplican
+   en vivo** (máx 3 posiciones con capital, máx 2 por clúster — el portfolio se validó con
+   ese esquema pero el monitor no lo enforceaba: podían abrirse 7×2% = 14% simultáneo en un
+   clúster ~0.7 correlacionado); **freno diario real** (`max_daily_loss` 6% estaba en config
+   y nunca se chequeaba → ahora PnL cerrado del día UTC ≤ −6% bloquea nuevas entradas con
+   capital + ntfy CRITICAL); **timeout ccxt explícito** (10s, `OSCILION_CCXT_TIMEOUT_MS`) +
+   WARN de tick lento; y el estado del monitor **solo se persiste tras step exitoso** (antes
+   un `finally` guardaba estado posiblemente corrupto que un restart rehidrataba).
+
 ## 🎯 Puntos abiertos
 
 - Acumular ≥50 trades forward del núcleo gateado antes de cualquier veredicto de edge.

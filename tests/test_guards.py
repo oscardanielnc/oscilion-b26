@@ -70,6 +70,46 @@ def test_veto_posicion_formato_previo_cuenta_como_capital():
     assert guards.capital_position_on_symbol(states, "TRX") == "orb_breakout"
 
 
+# ------------------------- límites de cartera (Fase B) -------------------------
+def _cluster_of(sym, strategy):
+    return {"BTC": "majors", "BNB": "majors", "LINK": "majors", "DOT": "majors",
+            "TRX": "trx"}.get(sym, sym)
+
+
+def test_cartera_max_concurrent_bloquea():
+    abiertos = [("BTC", "ema"), ("LINK", "orb"), ("TRX", "orb")]
+    r = guards.cluster_cap_reason(abiertos, "DOT", "orb", _cluster_of, 3, 2)
+    assert r is not None and "max_concurrent" in r
+
+
+def test_cartera_max_por_cluster_bloquea():
+    abiertos = [("BTC", "ema"), ("LINK", "orb")]          # 2 en 'majors'
+    r = guards.cluster_cap_reason(abiertos, "DOT", "orb", _cluster_of, 3, 2)
+    assert r is not None and "majors" in r
+    # pero TRX (otro clúster) sí cabe
+    assert guards.cluster_cap_reason(abiertos, "TRX", "orb", _cluster_of, 3, 2) is None
+
+
+def test_cartera_con_hueco_pasa():
+    assert guards.cluster_cap_reason([("BTC", "ema")], "TRX", "orb", _cluster_of, 3, 2) is None
+    assert guards.cluster_cap_reason([], "BTC", "ema", _cluster_of, 3, 2) is None
+
+
+# ------------------------------ freno diario ------------------------------
+def test_freno_diario_limite():
+    cap = 10_000.0
+    assert not guards.daily_loss_hit(-599.0, cap, max_daily_loss=0.06)
+    assert guards.daily_loss_hit(-600.0, cap, max_daily_loss=0.06)   # justo −6%
+    assert guards.daily_loss_hit(-814.0, cap, max_daily_loss=0.06)   # el primer ciclo
+    assert not guards.daily_loss_hit(+100.0, cap, max_daily_loss=0.06)
+
+
+def test_utc_midnight():
+    d = 86_400_000
+    assert guards.utc_midnight_ms(5 * d + 123_456) == 5 * d
+    assert guards.utc_midnight_ms(5 * d) == 5 * d
+
+
 # ------------------------------ tp runner (sin TP) ------------------------------
 def test_tp_barrier_runner_nunca_dispara():
     assert tp_barrier(None, "long") == math.inf

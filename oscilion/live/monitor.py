@@ -24,7 +24,7 @@ from oscilion.data import fetch, store
 from oscilion.live import forward, guards
 from oscilion.notify import notify
 from oscilion.persistence import db
-from oscilion.strategies import all_assignments, library as S
+from oscilion.strategies import all_assignments, library as S, portfolio as P
 from oscilion.strategies.context import build_ctx
 
 log = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ class LiveMonitor:
         self.assignments = all_assignments()
         self.symbols = sorted({s for s, _a in self.assignments})
         self._ticks = 0
+        self._daily_halt_notified = None    # día UTC ya notificado del freno diario
         # rehidratar estado persistido (sobrevive reinicios → forward-test sin huecos)
         db.init_db()
         saved = db.load_monitor_states()
@@ -121,7 +122,10 @@ class LiveMonitor:
             except Exception:
                 log.exception("monitor %s %s", sym, a.strategy)
                 db.log_event("ERROR", "live.monitor", f"{sym} {a.strategy} falló en tick")
-            finally:
+            else:
+                # persistir SOLO tras un paso exitoso: si _step_one explotó a mitad,
+                # el estado en memoria puede estar corrupto y un restart rehidrataría
+                # una posición rota (doble cierre / re-entrada fantasma).
                 db.save_monitor_state(self._key(sym, a.strategy),
                                       self.states[(sym, a.strategy)].to_dict())
 
@@ -207,13 +211,41 @@ class LiveMonitor:
             db.log_event("WARN", "live.monitor",
                          f"{sym} {a.strategy}: degradado a observe — {gate_reason}")
 
-        # veto cruzado (FORWARD_REVIEW #2): 1 posición CON CAPITAL por símbolo.
+        # guardas de cartera — solo aplican a trades CON capital (observe es stats-only)
         if not observe:
+            # veto cruzado (FORWARD_REVIEW #2): 1 posición CON CAPITAL por símbolo.
             other = guards.capital_position_on_symbol(self.states, sym)
             if other is not None:
                 db.log_event("INFO", "live.monitor",
                              f"{sym} {a.strategy}: veto símbolo — capital ya abierto en {other}")
                 db.log_decision(sym, "no-entrar", f"veto símbolo: posición abierta ({other})")
+                return None
+            # límites de Fase B (esquema con el que se validó el portfolio): máx 3
+            # posiciones con capital, máx 2 por clúster de correlación.
+            open_caps = [(s, strat) for (s, strat), st2 in self.states.items()
+                         if st2.position is not None and not st2.position.get("observe", False)]
+            cap_reason = guards.cluster_cap_reason(open_caps, sym, a.strategy,
+                                                   P.cluster_of, P.MAX_CONCURRENT, P.MAX_PER_CLUSTER)
+            if cap_reason is not None:
+                db.log_event("INFO", "live.monitor",
+                             f"{sym} {a.strategy}: límite de cartera — {cap_reason}")
+                db.log_decision(sym, "no-entrar", f"límite cartera: {cap_reason}")
+                return None
+            # freno diario (−6% por defecto): nuevas entradas con capital bloqueadas
+            # hasta las 00:00 UTC; las posiciones abiertas se siguen gestionando.
+            day0 = guards.utc_midnight_ms(int(time.time() * 1000))
+            pnl_today = db.capital_pnl_since(day0)
+            if guards.daily_loss_hit(pnl_today, self.capital):
+                if self._daily_halt_notified != day0:
+                    self._daily_halt_notified = day0
+                    notify(f"⛔ FRENO DIARIO: PnL hoy {pnl_today:+.0f} ≤ "
+                           f"−{config.max_daily_loss:.0%} de {self.capital:,.0f} — "
+                           f"sin nuevas entradas con capital hasta 00:00 UTC",
+                           "CRITICAL", "live.monitor")
+                db.log_event("WARN", "live.monitor",
+                             f"{sym} {a.strategy}: freno diario activo "
+                             f"(PnL hoy {pnl_today:+.0f}) — no se abre")
+                db.log_decision(sym, "no-entrar", "freno diario de pérdida")
                 return None
 
         risk_amt = self.capital * config.risk_per_trade

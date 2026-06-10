@@ -40,7 +40,8 @@ def get_exchange():
         import ccxt
 
         klass = getattr(ccxt, config.exchange)
-        _exchange = klass({"enableRateLimit": True, "options": {"defaultType": "swap"}})
+        _exchange = klass({"enableRateLimit": True, "timeout": config.ccxt_timeout_ms,
+                           "options": {"defaultType": "swap"}})
     return _exchange
 
 

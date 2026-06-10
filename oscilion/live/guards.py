@@ -52,6 +52,37 @@ def stop_pct_ok(stop_pct: float, min_stop_pct: float | None = None) -> bool:
     return stop_pct >= floor
 
 
+def cluster_cap_reason(open_combos: list[tuple[str, str]], new_sym: str, new_strategy: str,
+                       cluster_of, max_concurrent: int, max_per_cluster: int) -> str | None:
+    """Límites de cartera de Fase B (tuned.py: maxc=3, clúster=2) — el esquema con
+    el que se VALIDÓ el portfolio. Sin esto el vivo puede cargar 7×2% = 14% de
+    riesgo simultáneo en un clúster ~0.7 correlacionado.
+
+    `open_combos` = [(sym, strategy)] de posiciones CON CAPITAL abiertas.
+    Devuelve la razón del bloqueo o None si cabe.
+    """
+    if len(open_combos) >= max_concurrent:
+        return f"max_concurrent {len(open_combos)}/{max_concurrent}"
+    cl = cluster_of(new_sym, new_strategy)
+    n_cl = sum(1 for s, strat in open_combos if cluster_of(s, strat) == cl)
+    if n_cl >= max_per_cluster:
+        return f"clúster '{cl}' {n_cl}/{max_per_cluster}"
+    return None
+
+
+def utc_midnight_ms(now_ms: int) -> int:
+    """00:00 UTC del día de `now_ms` — el freno diario resetea con el día UTC."""
+    return (now_ms // 86_400_000) * 86_400_000
+
+
+def daily_loss_hit(pnl_today: float, capital: float,
+                   max_daily_loss: float | None = None) -> bool:
+    """True si el PnL cerrado de hoy ya quemó el límite diario (−6% por defecto).
+    Solo bloquea nuevas entradas con capital; las abiertas se siguen gestionando."""
+    lim = config.max_daily_loss if max_daily_loss is None else max_daily_loss
+    return pnl_today <= -lim * capital
+
+
 def capital_position_on_symbol(states: dict, sym: str) -> str | None:
     """Estrategia con posición CON CAPITAL abierta en `sym` (o None).
 

@@ -167,6 +167,22 @@ def log_trade(sym: str, side: str, mode: str, **f: Any) -> Optional[int]:
     return _insert("trades", {k: v for k, v in f.items() if k in allowed})
 
 
+def capital_pnl_since(since_ms: int) -> float:
+    """PnL cerrado de trades CON CAPITAL (observe=0) desde `since_ms`.
+    Lo usa el freno diario; ante fallo devuelve 0.0 (no frena por error de BD,
+    el breaker de errores ya cubre ese caso)."""
+    try:
+        with _lock:
+            row = get_connection().execute(
+                "SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE status='closed'"
+                " AND COALESCE(observe, 0)=0 AND exit_ts >= ?", (since_ms,),
+            ).fetchone()
+        return float(row[0] or 0.0)
+    except Exception:
+        log.exception("Fallo capital_pnl_since")
+        return 0.0
+
+
 def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
     """Stats del backtest LOCAL (motor honesto) para el gate de validación.
     None si aún no hay snapshot (forward.refresh no corrió) → el gate bloquea."""
