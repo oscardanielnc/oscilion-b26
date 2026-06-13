@@ -1,7 +1,43 @@
 # Forward Review — primer ciclo real (paper)
 
 > Bitácora de revisiones del forward en vivo (dry-run) y puntos abiertos a resolver.
-> Última revisión: **2026-06-10** (datos 08–10 jun).
+> Última revisión: **2026-06-12** (datos 10–12 jun).
+
+## 📌 Estado al 2026-06-12 (deploy CONFIRMADO en vivo)
+
+- **Infraestructura:** sana. `errors: []` en toda la ventana; cierres con `cost_audit`
+  poblado (schema v6 desplegado y funcionando), stops salen a −1.04R **exactos** según
+  modelo → no hay coste oculto, el slippage de salida ya estaba modelado (confirmado con datos).
+- **2 trades cerrados en la ventana**, ambos **PRE-GATE**:
+
+| # | Símbolo | Estrategia | Lado | R | Entrada (Lima) | Cierre |
+|---|---|---|---|---|---|---|
+| 1 | DOGE | vwap_anchor | long | −1.04 | 10-jun 09:00 | stop |
+| 2 | ETH  | vwap_anchor | long | −1.04 | 10-jun 09:00 | stop |
+
+  > Las entradas (09:00) son **anteriores** a los commits del gate (`2980f85` 09:22,
+  > `119792b` 10:17 de ese mismo día). No cuentan como evidencia gateada. El gate actual
+  > **habría vetado DOGE** (backtest local exp_R −0.077). Son herencia del proceso viejo.
+
+- **1 entrada POST-GATE (legítima):** AVAX/vwap_anchor long (12-jun 12:00), backtest local
+  n=188 / exp_R +0.135 → pasa el gate correctamente. **Sigue abierta** (sin cierre aún).
+- **Resto de series en ESPERANDO**: el gate filtra, no duerme.
+
+### Acumulado forward (todo el periodo, 06-08 → 06-12)
+**7 trades cerrados · 1 ganado (TRX ORB +0.22) · ≈ −6.2R · TODOS pre-gate.**
+La muestra gateada "limpia" es hoy **1 trade abierto** → estadísticamente cero info.
+**Los −6.2R no refutan el edge**: son fuga de proceso ya corregida, no señal de mercado.
+
+### Observaciones a vigilar
+- ⚠️ **`vwap_anchor` va 0/5 en forward** (la pata más débil del backtest). El gate ya corta
+  DOGE (−0.077) y XRP (−0.114), pero **ETH pasa con exp_R +0.022** → ruido, no edge.
+  **Propuesta:** subir `OSCILION_GATE_MIN_EXP_R` de 0.0 a **+0.05/+0.10** (≈ coste ida+vuelta)
+  para que solo opere lo que paga sus comisiones con margen. (1 línea / env var, sin código.)
+- 🐢 **Ritmo ~0.5 trades/día post-gate → 50 gateados ≈ 3 meses.** Si es muy lento, la palanca
+  segura es **ampliar universo dentro de combos ya validados** (más símbolos con n≥30 local),
+  nunca aflojar el gate.
+- ✅ Objetivo del sprint anterior (que el proceso deje de regalar R) **cumplido y verificado
+  en producción**.
 
 ## 📌 Estado al 2026-06-10
 
@@ -76,4 +112,7 @@
 
 ## 🗂️ Histórico de revisiones
 - **2026-06-08** (datos 06–08 jun): 2 entradas TRX abiertas, sin cierres. Detectado: posiciones opuestas mismo símbolo, `tp=1e+18`, mono-TRX (resto ESPERANDO), faltaba logging de cierre.
-- **2026-06-10** (datos 08–10 jun): primer ciclo de 5 trades cerrados (este doc).
+- **2026-06-10** (datos 08–10 jun): primer ciclo de 5 trades cerrados (−4.07R).
+- **2026-06-12** (datos 10–12 jun): deploy confirmado en vivo (cost_audit poblado, 0 errores);
+  2 cierres pre-gate (DOGE/ETH vwap −1.04R c/u); 1ª entrada gateada legítima (AVAX, abierta).
+  Acumulado 7 cerrados ≈ −6.2R, todos pre-gate. Veredicto de edge sigue pendiente de muestra gateada.

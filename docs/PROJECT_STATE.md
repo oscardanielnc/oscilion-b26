@@ -1,8 +1,12 @@
 # Estado del proyecto Oscilion — v0.6.0-pilot
 
-**Actualizado:** 2026-06-10 (post primer ciclo forward + endurecimiento de proceso).
+**Actualizado:** 2026-06-12 (deploy confirmado en vivo + 2ª revisión forward).
 Lee también `FORWARD_REVIEW.md` (bitácora forward + diseños de las guardas),
 `STRATEGY_MAP.md` (dirección), `B_PORTFOLIO_PLAN.md`.
+
+> **Resumen en una línea (2026-06-12):** infraestructura y proceso ✅ verificados en
+> producción; **el edge sigue SIN veredicto** — la muestra gateada limpia es 1 trade abierto.
+> No pivotar: decidir ahora sería con ruido. Acumular ≥50 trades gateados (§6).
 
 ---
 
@@ -88,8 +92,13 @@ schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://213.35.1
 - 2026-06-08/10: primer ciclo forward cerrado y revisado (FORWARD_REVIEW.md).
 - 2026-06-10 (`2980f85`): gate de validación + observe enforced + veto símbolo + señal
   vencida + tp runner None + piso de stop + cost_audit (schema v6).
-- 2026-06-10 (este commit): límites de cartera Fase B en vivo + freno diario −6% +
+- 2026-06-10 (`119792b`): límites de cartera Fase B en vivo + freno diario −6% +
   timeout ccxt explícito + warn tick lento + estado solo se persiste tras step exitoso.
+- **2026-06-12: deploy CONFIRMADO en vivo.** Logs 10–12 jun: `cost_audit` poblado en cierres,
+  stops a −1.04R exactos (slippage ya modelado, sin coste oculto), `errors: []`. 2 cierres de
+  la ventana son **pre-gate** (DOGE/ETH vwap, entraron 22 min antes de los commits del gate);
+  1ª entrada gateada legítima (AVAX, abierta). Acumulado forward 7 cerrados ≈ −6.2R, **todos
+  pre-gate** → no refutan edge. Detalle en `FORWARD_REVIEW.md` (revisión 06-12).
 
 ## 6. Qué esperar tras el deploy + pendiente
 
@@ -101,6 +110,13 @@ schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://213.35.1
 
 **Criterio vigente: ≥50 trades forward con capital (gateados) antes de cualquier
 veredicto de edge. No tocar parámetros ni añadir estrategias mientras tanto.**
+A ritmo post-gate ~0.5 trades/día ⇒ ≈3 meses; si es muy lento, palanca segura =
+ampliar universo dentro de combos ya validados (n≥30 local), nunca aflojar el gate.
+
+**A evaluar la próxima revisión (no urgente):**
+- ⚠️ `vwap_anchor` va 0/5 en forward y ETH pasa el gate con exp_R **+0.022** (casi-cero).
+  Propuesta: subir `OSCILION_GATE_MIN_EXP_R` 0.0 → **+0.05/+0.10** (≈ coste ida+vuelta) para
+  exigir margen sobre comisiones. 1 línea / env var, sin tocar código. Decisión de Oscar.
 
 **Backlog priorizado:**
 - **B (infra):** retención BD (90d snapshots/events) + VACUUM mensual; StartLimitBurst=5
