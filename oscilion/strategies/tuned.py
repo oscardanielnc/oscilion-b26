@@ -51,4 +51,7 @@ CLUSTERS = {
     'XAU/USDT:USDT|momentum_pullback': 'gold',
 }
 
-LIMITS = {'max_concurrent': 3, 'max_per_cluster': 2}
+# max_concurrent 3→4 (research/concurrency_sweep.py, 2026-06-22): con 17 combos el tope
+# de 3 era el cuello de botella. 4 DOMINA a 3 en OOS — más throughput, mejor Sharpe
+# (1.78 vs 1.18) Y menor MaxDD (-61% vs -70%). Más de 4 baja Sharpe y sube DD.
+LIMITS = {'max_concurrent': 4, 'max_per_cluster': 2}
