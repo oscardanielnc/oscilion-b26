@@ -1,12 +1,16 @@
-# Estado del proyecto Oscilion — v0.6.0-pilot
+# Estado del proyecto Oscilion — v0.7 (cartera v2)
 
-**Actualizado:** 2026-06-12 (deploy confirmado en vivo + 2ª revisión forward).
-Lee también `FORWARD_REVIEW.md` (bitácora forward + diseños de las guardas),
-`STRATEGY_MAP.md` (dirección), `B_PORTFOLIO_PLAN.md`.
+**Actualizado:** 2026-06-22 (auditoría fuerte + reconstrucción de cartera por edge OOS +
+anti-beta + ampliación de universo). Lee también `AUDIT_2026-06-22.md` (la auditoría
+completa y el método), `FORWARD_REVIEW.md`, `STRATEGY_MAP.md`.
 
-> **Resumen en una línea (2026-06-12):** infraestructura y proceso ✅ verificados en
-> producción; **el edge sigue SIN veredicto** — la muestra gateada limpia es 1 trade abierto.
-> No pivotar: decidir ahora sería con ruido. Acumular ≥50 trades gateados (§6).
+> **Resumen en una línea (2026-06-22):** la auditoría refutó el miedo a "overfit" (purged-WF
+> deja los combos positivos) y reveló que el problema era el **gate** (leía un backtest
+> in-sample inflado 2-3× y elegía perdedores). Corregido: gate OOS + regla de capital por
+> **doble régimen OOS + anti-beta**. Cartera reconstruida a **17 combos con capital + 6
+> observe** (incluye oro y alts con alpha real por el lado short). **Desplegado y verificado
+> en vivo el 2026-06-22.** Riesgo abierto #1: el sizing 2%/trade da MaxDD backtest ~-60% →
+> bajar R antes de capital real (ver §7).
 
 ---
 
@@ -15,17 +19,24 @@ Lee también `FORWARD_REVIEW.md` (bitácora forward + diseños de las guardas),
 **Oscilion = observador multi-moneda que asigna a CADA moneda la estrategia que se le
 validó, deja correr ganadores, y solo opera donde hay edge demostrado.** Convicción > cantidad.
 
-**Portfolio v1 (9 monedas, 12 series):**
-| Moneda | Estrategia | Capital | Notas |
-|---|---|---|---|
-| BTC, BNB, TRX | EMA_TREND_STACK (tp_r=4) | ✅ (si pasa gate) | trenders; full+OOS+WF positivos |
-| LINK, DOT, TRX | ORB_BREAKOUT (tp_r=4) | ✅ (si pasa gate) | breakout rescata alts |
-| ETH, AVAX | VWAP_ANCHOR (tp_r=2.5) | ✅ (si pasa gate) | R3c; diversifican |
-| BTC, TRX, XRP, DOGE | VWAP_ANCHOR | 👁️ observe | WF dudoso (full/test neg) |
-| TRX | BREAK_RETEST | 👁️ observe | n=1 local; confirmar |
+**Cartera v2 (2026-06-22) — 17 con capital + 6 observe, 17 monedas.**
+Regla de capital: exp_R ≥ +0.10 en DOS regímenes OOS (holdout >2025 **Y** 2026) con n≥30,
+salida 15m, costes reales, **y** pasar el chequeo anti-beta (rinde por el lado short o con
+el activo plano, no montando una subida). Config FIJA por estrategia.
 
-**"Capital" siempre condicionado al gate dinámico** (ver §3): sin n≥30 y exp_R>0 en el
-backtest LOCAL, la serie opera como observe (sin capital) aunque la asignación diga capital.
+| Clúster | Combos con capital | Edge (OOS/2026) |
+|---|---|---|
+| `trx` | TRX × {vwap, ema, orb, break_retest} | +0.13..+0.34 / +0.45..+0.99 |
+| `altlong` | LINK orb, XRP orb, DOGE orb, BNB vwap, AVAX vwap, TIA vwap, ATOM vwap | +0.10..+0.37 |
+| `altbreak` | RUNE, NEO, FLOW, HBAR — break_retest (alpha por el SHORT en alts en caída) | +0.13..+0.34 / +0.15..+1.07 |
+| `gold` | PAXG break_retest, XAU momentum (descorrelacionados del cripto) | +0.15..+0.47 |
+
+**Observe (sin capital):** BTC ema, BTC orb, BNB ema, ETH vwap, DOT orb, **PAXG ema**
+(degradado: era beta del oro +41%). Podados: BTC/DOGE/XRP vwap (negativos ambos regímenes).
+
+**"Capital" siempre condicionado al gate dinámico** (ver §3), ahora medido en ventana OOS
+`[2025-01, inception)` (no in-sample) con `exp_R > +0.05`. Límites de cartera:
+**máx 4 concurrentes (subido de 3 con `concurrency_sweep.py`), máx 2 por clúster.**
 
 ## 2. Arquitectura (estado actual)
 
@@ -62,9 +73,11 @@ Nacen del primer ciclo forward (−4.07R, del cual −3.2R fue de combos sin val
 1. **Señal vencida** (`max_signal_age_min=30`): vela de señal vieja (downtime/refresh
    fallido) → no entrar a precio vencido.
 2. **Piso de stop** (`min_stop_pct=0.2%`): stop→0 dispara el notional. Idéntico en engine.
-3. **Gate de validación** (`gate_min_n=30`, `gate_min_exp_r=0`): capital solo si el
-   backtest LOCAL (forward_results) lo respalda; si no → degrada a **observe**
-   (trade virtual sin capital, `trades.observe=1`, fuera del PnL, sigue sumando stats).
+3. **Gate de validación** (`gate_min_n=30`, `gate_min_exp_r=+0.05`): capital solo si el
+   backtest LOCAL lo respalda; si no → degrada a **observe** (sin capital, `observe=1`,
+   fuera del PnL, sigue sumando stats). **2026-06-22:** el backtest del gate se mide en
+   ventana **OOS `[2025-01, inception)`** (`gate_backtest_from_ms`), no in-sample full-history
+   (que inflaba el exp_R 2-3× y elegía perdedores — ver `AUDIT_2026-06-22.md`).
 4. **Veto por símbolo**: máx 1 posición CON capital por símbolo (cualquier dirección).
 5. **Límites de cartera (Fase B)**: máx 3 posiciones con capital, máx 2 por clúster —
    el esquema con el que se validó el portfolio (antes NO se aplicaba en vivo).
@@ -94,39 +107,39 @@ schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://213.35.1
   vencida + tp runner None + piso de stop + cost_audit (schema v6).
 - 2026-06-10 (`119792b`): límites de cartera Fase B en vivo + freno diario −6% +
   timeout ccxt explícito + warn tick lento + estado solo se persiste tras step exitoso.
-- **2026-06-12: deploy CONFIRMADO en vivo.** Logs 10–12 jun: `cost_audit` poblado en cierres,
-  stops a −1.04R exactos (slippage ya modelado, sin coste oculto), `errors: []`. 2 cierres de
-  la ventana son **pre-gate** (DOGE/ETH vwap, entraron 22 min antes de los commits del gate);
-  1ª entrada gateada legítima (AVAX, abierta). Acumulado forward 7 cerrados ≈ −6.2R, **todos
-  pre-gate** → no refutan edge. Detalle en `FORWARD_REVIEW.md` (revisión 06-12).
+- **2026-06-12: deploy CONFIRMADO en vivo** (cost_audit poblado, stops −1.04R exactos, errors:[]).
+- **2026-06-22: AUDITORÍA FUERTE + CARTERA v2 (desplegado y verificado).** Ver `AUDIT_2026-06-22.md`.
+  - Forward acumulado 26 trades / −10.6R analizado: NO era overfit (purged-WF `research/purged_wf.py`
+    deja los combos positivos; 2026-YTD sano) — era muestra diminuta + quincena hostil + un **gate
+    inflado** (in-sample full-history, +1.23 vs +0.39 OOS real) que elegía perdedores.
+  - **Gate corregido** a ventana OOS + `exp_R>+0.05` (commit `236cb55`).
+  - **Cartera reconstruida** por doble-régimen OOS + **anti-beta** (`validate_alts.py`; lección de
+    `tvindicators`: oro long-only = beta). 17 capital + 6 observe; ampliado a alts (RUNE/NEO/FLOW/HBAR
+    break_retest — alpha por el SHORT) y oro (commits `1cfbb8b`, +concurrency). Histórico 15m de 8
+    monedas nuevas sembrado en la VM.
+  - **`max_concurrent` 3→4** por evidencia (`research/concurrency_sweep.py`: domina a 3 en return,
+    Sharpe y MaxDD).
 
-## 6. Qué esperar tras el deploy + pendiente
+## 6. Estado en vivo + qué esperar
 
-**Tras desplegar, es NORMAL ver:**
-- Eventos "degradado a observe" en monedas nuevas con histórico local corto (ETH/AVAX
-  posiblemente) — es el gate funcionando; se gradúan solos cuando el backfill crece.
-- Export diario con dos tablas: trades CON capital (cuentan) y observe (no cuentan).
-- Alertas 👁️ OBSERVA en el móvil además de 🟢 ENTRA.
+**Desplegado 2026-06-22:** servicios `active`, `forward refresh: 23 series, 0 oscuras`, sin errores.
+El gate lee OOS (PAXG bret +0.51, TRX vwap +0.32...). Es NORMAL ver alertas 👁️ OBSERVA además de
+🟢 ENTRA, y algún "degradado a observe"/"señal vencida" (guardas funcionando).
 
-**Criterio vigente: ≥50 trades forward con capital (gateados) antes de cualquier
-veredicto de edge. No tocar parámetros ni añadir estrategias mientras tanto.**
-A ritmo post-gate ~0.5 trades/día ⇒ ≈3 meses; si es muy lento, palanca segura =
-ampliar universo dentro de combos ya validados (n≥30 local), nunca aflojar el gate.
+**Criterio vigente:** acumular forward gateado de la cartera v2 (ahora con 17 combos y 4
+concurrentes ⇒ mucho más rápido que los ~0.5 trades/día previos) y vigilar que el forward
+confirme el OOS. NO aflojar el gate ni el anti-beta. Ampliar solo con combos que pasen
+`universe_scan.py --tf 15m` + `validate_alts.py` (15m + doble-OOS + anti-beta).
 
-**A evaluar la próxima revisión (no urgente):**
-- ⚠️ `vwap_anchor` va 0/5 en forward y ETH pasa el gate con exp_R **+0.022** (casi-cero).
-  Propuesta: subir `OSCILION_GATE_MIN_EXP_R` 0.0 → **+0.05/+0.10** (≈ coste ida+vuelta) para
-  exigir margen sobre comisiones. 1 línea / env var, sin tocar código. Decisión de Oscar.
+## 7. ⚠️ Riesgo abierto #1 — SIZING antes de capital real
 
-**Backlog priorizado:**
-- **B (infra):** retención BD (90d snapshots/events) + VACUUM mensual; StartLimitBurst=5
-  en systemd; chequeo de disco; ORDER BY ts en /events.
-- **C (deuda):** borrar ~700 LOC research/legacy (features/{ranges,regime,reversion},
-  scoring, signals/entry, backtest/{engine,metrics,report}); mover costs.py fuera de
-  backtest/; tests de integración (rehidratación, breaker, gate round-trip); CI GitHub.
-- **D (validación — decide el target):** semáforo semanal backtest-vs-forward automático
-  (ntfy domingos); regla explícita de graduación/demote de observe (p.ej. n_fwd≥20 y
-  exp_R>0 gradúa; sum_R<−8R demota); al pasar a fills reales, comparar fill vs cost_audit
-  y recalibrar slippage; reabrir maker-entry (R4).
+`concurrency_sweep.py` mostró **MaxDD backtest ~-60% a `risk_per_trade=2%`** (el freno diario
+−6% no está en esa sim y ayudaría, pero la cola es alta). En dry-run no afecta el track record
+(todo se mide en R). **Antes de pasar a paper/live hay que bajar R por trade** (medio-Kelly,
+estilo `tvindicators` R=0.5% → MaxDD p95 ~-14%) y/o pesos por edge-ajustado-a-riesgo. Decisión
+de Oscar; es el invariante de riesgo, no tocar a ciegas. Calibrar con una sim de cartera dedicada.
 
-> Docs clave: `FORWARD_REVIEW.md` · `STRATEGY_MAP.md` · `B_PORTFOLIO_PLAN.md` · `DEPLOY.md`.
+**Backlog:** retención BD + VACUUM; regla explícita de graduación/demote de observe; al pasar a
+fills reales comparar fill vs `cost_audit`; borrar research/legacy; CI GitHub.
+
+> Docs clave: `AUDIT_2026-06-22.md` · `FORWARD_REVIEW.md` · `STRATEGY_MAP.md` · `DEPLOY.md`.
