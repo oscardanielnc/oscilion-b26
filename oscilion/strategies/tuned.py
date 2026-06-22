@@ -1,13 +1,15 @@
-# GENERADO/curado tras la auditoría 2026-06-22 (purged-WF + barrido de universo).
-# Esquema validado en Fase B: equal-weight, maxc=3, clúster=2 (tunear pesos por
-# moneda sobreajusta en muestras chicas). Solo combos CON capital necesitan entrada
-# aquí (observe nunca recibe capital ni pasa por el límite de clúster).
+# GENERADO/curado tras la auditoría 2026-06-22 (purged-WF + barrido de universo +
+# validación 15m anti-beta de alts). Esquema validado en Fase B: equal-weight,
+# maxc=3, clúster=2 (tunear pesos por moneda sobreajusta en muestras chicas).
+# Solo combos CON capital van aquí (observe nunca recibe capital ni pasa el límite).
 #
-# Clústeres = control de correlación para el límite "máx N por clúster":
-#   trx    → las 4 estrategias sobre TRX (el veto por símbolo ya deja 1 viva; aquí
-#            refuerza que TRX no monopolice las 3 ranuras de capital).
-#   crypto → alts mayores correlacionadas entre sí (LINK/XRP/DOGE/BNB/AVAX).
-#   gold   → oro, descorrelacionado del cripto (PAXG/XAU) — fuerza diversificación.
+# Clústeres = control de correlación para "máx N por clúster". Con 17 combos y solo 3
+# posiciones concurrentes, separar por familia FUERZA diversificación (no 3 del mismo tipo):
+#   trx      → 4 estrategias sobre TRX (el veto por símbolo ya deja 1 viva).
+#   altlong  → largos sesgados (orb/vwap mean-rev) en alts mayores correlacionados.
+#   altbreak → break_retest bidireccional en alts (gana por el lado SHORT en caídas;
+#              anti-correlacionado con los largos → gran diversificador).
+#   gold     → oro, descorrelacionado del cripto.
 
 WEIGHTS = {
     'TRX/USDT:USDT|vwap_anchor': 1.0,
@@ -19,8 +21,13 @@ WEIGHTS = {
     'DOGE/USDT:USDT|orb_breakout': 1.0,
     'BNB/USDT:USDT|vwap_anchor': 1.0,
     'AVAX/USDT:USDT|vwap_anchor': 1.0,
+    'TIA/USDT:USDT|vwap_anchor': 1.0,
+    'ATOM/USDT:USDT|vwap_anchor': 1.0,
+    'RUNE/USDT:USDT|break_retest': 1.0,
+    'NEO/USDT:USDT|break_retest': 1.0,
+    'FLOW/USDT:USDT|break_retest': 1.0,
+    'HBAR/USDT:USDT|break_retest': 1.0,
     'PAXG/USDT:USDT|break_retest': 1.0,
-    'PAXG/USDT:USDT|ema_trend_stack': 1.0,
     'XAU/USDT:USDT|momentum_pullback': 1.0,
 }
 
@@ -29,13 +36,18 @@ CLUSTERS = {
     'TRX/USDT:USDT|ema_trend_stack': 'trx',
     'TRX/USDT:USDT|orb_breakout': 'trx',
     'TRX/USDT:USDT|break_retest': 'trx',
-    'LINK/USDT:USDT|orb_breakout': 'crypto',
-    'XRP/USDT:USDT|orb_breakout': 'crypto',
-    'DOGE/USDT:USDT|orb_breakout': 'crypto',
-    'BNB/USDT:USDT|vwap_anchor': 'crypto',
-    'AVAX/USDT:USDT|vwap_anchor': 'crypto',
+    'LINK/USDT:USDT|orb_breakout': 'altlong',
+    'XRP/USDT:USDT|orb_breakout': 'altlong',
+    'DOGE/USDT:USDT|orb_breakout': 'altlong',
+    'BNB/USDT:USDT|vwap_anchor': 'altlong',
+    'AVAX/USDT:USDT|vwap_anchor': 'altlong',
+    'TIA/USDT:USDT|vwap_anchor': 'altlong',
+    'ATOM/USDT:USDT|vwap_anchor': 'altlong',
+    'RUNE/USDT:USDT|break_retest': 'altbreak',
+    'NEO/USDT:USDT|break_retest': 'altbreak',
+    'FLOW/USDT:USDT|break_retest': 'altbreak',
+    'HBAR/USDT:USDT|break_retest': 'altbreak',
     'PAXG/USDT:USDT|break_retest': 'gold',
-    'PAXG/USDT:USDT|ema_trend_stack': 'gold',
     'XAU/USDT:USDT|momentum_pullback': 'gold',
 }
 
