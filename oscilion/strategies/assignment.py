@@ -79,10 +79,21 @@ PORTFOLIO: dict[str, list[Assign]] = {
     "BNB/USDT:USDT":  [_vwap("media", "OOS+0.153 / 2026+0.116"),
                        _ema("media", observe=True, note="OOS+0.358 fuerte pero 2026+0.049 flojo → observe")],
     "AVAX/USDT:USDT": [_vwap("media", "OOS+0.104 / 2026+0.154")],
-    # ORO — descorrelacionado del cripto, los mejores edges del barrido (necesita backfill VM)
-    "PAXG/USDT:USDT": [_bret("alta", "ORO OOS+0.469 / 2026+1.847 — mejor combo del universo"),
-                       _ema("alta",  "ORO OOS+0.586 / 2026+0.230")],
-    "XAU/USDT:USDT":  [_mom("media", "ORO-spot OOS+0.151 / 2026+0.250")],
+    # Alts validados 2026-06-22 (15m + doble-OOS + ANTI-BETA). break_retest sobre alts en
+    # caída = edge REAL por el lado SHORT (estos alts sangraron -26%/-68% en 2026 y la
+    # estrategia ganó shorteando → es alpha, no beta). vwap = mean-rev long con activo plano/abajo.
+    "RUNE/USDT:USDT": [_bret("alta", "OOS+0.318 / 2026+1.069; shorts ganan (RUNE -29%) = alpha")],
+    "NEO/USDT:USDT":  [_bret("alta", "OOS+0.126 / 2026+1.023; shorts +1.22 (NEO -38%) = alpha")],
+    "FLOW/USDT:USDT": [_bret("alta", "OOS+0.337 / 2026+0.175; shorts ganan (FLOW -68%) = alpha")],
+    "HBAR/USDT:USDT": [_bret("media", "OOS+0.192 / 2026+0.153; shorts (HBAR -26%) = alpha")],
+    "TIA/USDT:USDT":  [_vwap("media", "OOS+0.155 / 2026+0.271; long mean-rev (TIA -15%) = alpha")],
+    "ATOM/USDT:USDT": [_vwap("media", "OOS+0.119 / 2026+0.249; long con ATOM plano = alpha")],
+    # ORO — descorrelacionado del cripto. break_retest = ALPHA real (shorts +3.0R con oro
+    # plano en 2026; no es beta). ema long-only montaba la subida del oro +41% (beta) → observe.
+    "PAXG/USDT:USDT": [_bret("alta", "ORO OOS+0.469 / 2026+1.847; anti-beta OK (shorts ganan)"),
+                       _ema("media", observe=True,
+                            note="ORO: long-only montó oro+41% (beta); plano 2026 solo +0.23 → observe")],
+    "XAU/USDT:USDT":  [_mom("media", "ORO-spot OOS+0.151 / 2026+0.250; oro plano → alpha leve")],
 
     # OBSERVE (sin capital) — pasan un régimen pero fallan el otro; siguen generando
     # stats y se gradúan solas vía el gate si confirman. NO sangran capital.
