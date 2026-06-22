@@ -58,7 +58,12 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
             bars = len(store.load_bars(sym, config.base_timeframe))
             if bars < DARK_COIN_MIN_BARS:
                 dark.append(f"{sym.split('/')[0]}|{a.strategy}({bars}velas)")
-        bt = _stats([t for t in trades if t["entry_ts"] < inception])
+        # backtest del gate = OOS [gate_from, inception): excluye la ventana donde se
+        # eligieron los params (pre-2025) para no inflar el exp_R que decide el capital.
+        gate_from = config.gate_backtest_from_ms
+        if gate_from >= inception:        # config inconsistente → no recortar
+            gate_from = 0
+        bt = _stats([t for t in trades if gate_from <= t["entry_ts"] < inception])
         fw = _stats([t for t in trades if t["entry_ts"] >= inception])
         for scope, s in (("backtest", bt), ("forward", fw)):
             db.upsert_forward_result(sym, a.strategy, scope, **s)
