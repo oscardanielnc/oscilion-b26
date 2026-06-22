@@ -113,7 +113,16 @@ class Config:
     # tiene muestra y edge: n >= gate_min_n y exp_r > gate_min_exp_r.
     # Si no pasa, se degrada a observe (alertas+stats, sin capital).
     gate_min_n: int = _env_int("OSCILION_GATE_MIN_N", 30)
-    gate_min_exp_r: float = _env_float("OSCILION_GATE_MIN_EXP_R", 0.0)
+    # +0.05R exige margen REAL sobre costes (la auditoría 06-22 mostró que exp_R≈0
+    # combos no sobreviven: el edge debe pagar comisiones con holgura).
+    gate_min_exp_r: float = _env_float("OSCILION_GATE_MIN_EXP_R", 0.05)
+    # El backtest del gate se mide SOLO desde aquí (OOS), no sobre todo el histórico:
+    # los params del portfolio fueron elegidos in-sample, así que reportar exp_R sobre
+    # toda la historia los infla 2-3× (auditoría 06-22: TRX break_retest +1.23 full vs
+    # +0.39 OOS). Medir desde 2025-01 deja fuera la ventana de selección → número honesto.
+    gate_backtest_from_ms: int = _env_int(
+        "OSCILION_GATE_BT_FROM_MS", 1735689600000  # 2025-01-01 UTC
+    )
 
     # --- señal vencida (FORWARD_REVIEW sesión/stale): si la vela de señal cerró
     # hace más de esto, NO se entra (el precio de referencia ya es viejo; pasa

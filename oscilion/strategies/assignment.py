@@ -24,31 +24,31 @@ class Assign:
     observe_only: bool = False      # True = forward-test SIN capital (alertas+stats, weight 0)
 
 
-# config validada del pilot (entrada fija; tp_r=4 = "dejar correr ganadores")
-_EMA = dict(atr_mult_sl=1.5, tp_r=4.0, fresh_gate=True, session_filter=True, rsi_filter=False)
-_ORB = dict(range_max_pct=0.015, tp_r=4.0, fresh_gate=True, long_only=False, session_filter=True)
+# ─────────────────────────────────────────────────────────────────────────────
+# CARTERA v2 (2026-06-22) — reconstruida desde la auditoría purged-WF + barrido de
+# universo (research/purged_wf.py, research/universe_scan.py). REGLA DE CAPITAL:
+# un combo solo lleva capital si su exp_R es ≥ +0.10 en DOS regímenes OOS
+# independientes (holdout >2025 Y 2026-YTD) con n_oos ≥ 30. Doble régimen positivo
+# ⇒ no es suerte de una ventana. Config FIJA por estrategia (re-tunear por moneda
+# sobreajusta en muestras chicas). Los `note` llevan: OOS-holdout / 2026-YTD.
+# ─────────────────────────────────────────────────────────────────────────────
 
-
-def _ema(conv, note="", max_hold=60):
-    # max_hold en barras de 4h: 60 = 240h (~10d) baseline; 30 = 120h (~5d) cap de cola.
-    return Assign("ema_trend_stack", dict(_EMA), max_hold, conv, note=note)
-
-
-def _orb(conv, note=""):
-    return Assign("orb_breakout", dict(_ORB), 24, conv, note=note)
-
-
-# break_retest — cfg validada SOLO en TRX (R3b: WF OOS +1.45). Forward-test sin capital.
-_BRET_TRX = dict(long_only=True, retest_half_atr=0.3, tp_r=0.0, trend_filter=False, vol_max_ratio=1.0)
-
-
-def _bret_observe(note=""):
-    return Assign("break_retest", dict(_BRET_TRX), 42, "observacion", note=note, observe_only=True)
-
-
-# vwap_anchor — config BASELINE (no los ganadores por-fold del WF: eso sobreajusta).
-# R3c: edge generalizable (6/12 WF+, mediana +0.069). max_hold 120 (1h) = 5d.
+# Configs FIJAS validadas (idénticas a las que pasaron el barrido OOS).
+_EMA  = dict(atr_mult_sl=1.5, tp_r=4.0, fresh_gate=True, session_filter=True, rsi_filter=False)
+_ORB  = dict(range_max_pct=0.015, tp_r=4.0, fresh_gate=True, long_only=False, session_filter=True)
 _VWAP = dict(sl_atr_mult=2.0, tp_r=2.5, fresh_gate=True, trend_filter=False, session_filter=False)
+_BRET = dict(vol_max_ratio=1.0, retest_half_atr=0.3, tp_r=0.0, trend_filter=True, long_only=False)
+_MOM  = dict(impulse_atr_min=0.8, pullback_max=0.8, tp_r=4.0, fresh_gate=True, long_only=True)
+
+
+def _ema(conv, note="", max_hold=30, observe=False):
+    return Assign("ema_trend_stack", dict(_EMA), max_hold,
+                  "observacion" if observe else conv, note=note, observe_only=observe)
+
+
+def _orb(conv, note="", observe=False):
+    return Assign("orb_breakout", dict(_ORB), 24,
+                  "observacion" if observe else conv, note=note, observe_only=observe)
 
 
 def _vwap(conv, note="", observe=False):
@@ -56,32 +56,46 @@ def _vwap(conv, note="", observe=False):
                   "observacion" if observe else conv, note=note, observe_only=observe)
 
 
-# NÚCLEO de alta convicción (full+OOS+WF positivos)
+def _bret(conv, note="", observe=False):
+    return Assign("break_retest", dict(_BRET), 42,
+                  "observacion" if observe else conv, note=note, observe_only=observe)
+
+
+def _mom(conv, note="", observe=False):
+    return Assign("momentum_pullback", dict(_MOM), 60,
+                  "observacion" if observe else conv, note=note, observe_only=observe)
+
+
+# NÚCLEO con capital — 12 combos, doble régimen OOS ≥ +0.10 (15m, costes reales).
 PORTFOLIO: dict[str, list[Assign]] = {
-    # BTC: hold-10d intacto — R6 mostró que acortar destruye su edge OOS (+0.13→neg).
-    "BTC/USDT:USDT":  [_ema("alta", "trender limpio; full+0.34/OOS+0.13; hold-10d (R6: no acortar)"),
-                       _vwap("alta", observe=True, note="R3c 🟡 WF+0.61 (test neg) → forward-test")],
-    # BNB/TRX: cap de cola 120h — R6: ~gratis OOS y elimina el 100% de zombies de 10d.
-    "BNB/USDT:USDT":  [_ema("alta", "full+0.13/OOS+0.41; cap120h (R6 OOS+0.35)", max_hold=30)],
-    "TRX/USDT:USDT":  [_ema("alta", "full+0.34/OOS+0.14; cap120h (R6 OOS+0.12)", max_hold=30),
-                       _orb("alta", "full+0.18/OOS+0.29; trend Y breakout"),
-                       _bret_observe("R3b: WF OOS +1.45; forward-test SIN capital (1 de 24 → confirmar)"),
-                       _vwap("alta", observe=True,
-                             note="R3c: WF+0.88 ✅ pero TRX ya carga 3 estrategias → forward-test")],
-    "LINK/USDT:USDT": [_orb("alta", "ORB rescata; full+0.20/OOS+0.31")],
-    "DOT/USDT:USDT":  [_orb("alta", "ORB rescata; full+0.13/OOS+0.10")],
-    # vwap_anchor (R3c): ✅ con capital en monedas nuevas que diversifican (full+test+WF +).
-    "ETH/USDT:USDT":  [_vwap("media", "R3c: full+0.02/test+0.11/WF+0.17 ✅; nueva, diversifica")],
-    "AVAX/USDT:USDT": [_vwap("media", "R3c: full+0.17/test+0.10/WF+0.15 ✅; nueva, diversifica")],
-    # vwap_anchor 🟡 (full o test negativo → WF posible suerte de fold): forward-test sin capital.
-    "XRP/USDT:USDT":  [_vwap("media", observe=True, note="R3c 🟡 WF+0.20 (full/test neg) → forward-test")],
-    "DOGE/USDT:USDT": [_vwap("media", observe=True, note="R3c 🟡 WF+0.70 n=36 (full/test neg) → forward-test")],
-    # marginales (en observación; pueden activarse tras afinar B / forward)
-    # "ADA/USDT:USDT":  [_orb("marginal")],
-    # "DOGE/USDT:USDT": [_orb("marginal")],
-    # "XRP/USDT:USDT":  [_orb("marginal")],
-    # "LTC/USDT:USDT":  [_orb("marginal")],
+    # TRX = el motor de edge (4 estrategias pasan; el veto por símbolo deja 1 viva a la vez)
+    "TRX/USDT:USDT":  [_vwap("alta", "OOS+0.318 / 2026+0.851"),
+                       _ema("alta",  "OOS+0.127 / 2026+0.989"),
+                       _orb("alta",  "OOS+0.336 / 2026+0.445"),
+                       _bret("alta", "OOS+0.190 / 2026+0.569 — promovido a capital")],
+    "LINK/USDT:USDT": [_orb("alta",  "OOS+0.368 / 2026+0.387")],
+    "XRP/USDT:USDT":  [_orb("media", "OOS+0.162 / 2026+0.233 — reemplaza a vwap (negativo)")],
+    "DOGE/USDT:USDT": [_orb("media", "OOS+0.114 / 2026+0.400 — reemplaza a vwap (negativo)")],
+    "BNB/USDT:USDT":  [_vwap("media", "OOS+0.153 / 2026+0.116"),
+                       _ema("media", observe=True, note="OOS+0.358 fuerte pero 2026+0.049 flojo → observe")],
+    "AVAX/USDT:USDT": [_vwap("media", "OOS+0.104 / 2026+0.154")],
+    # ORO — descorrelacionado del cripto, los mejores edges del barrido (necesita backfill VM)
+    "PAXG/USDT:USDT": [_bret("alta", "ORO OOS+0.469 / 2026+1.847 — mejor combo del universo"),
+                       _ema("alta",  "ORO OOS+0.586 / 2026+0.230")],
+    "XAU/USDT:USDT":  [_mom("media", "ORO-spot OOS+0.151 / 2026+0.250")],
+
+    # OBSERVE (sin capital) — pasan un régimen pero fallan el otro; siguen generando
+    # stats y se gradúan solas vía el gate si confirman. NO sangran capital.
+    "BTC/USDT:USDT":  [_ema("media", observe=True, note="2026+0.411 fuerte / OOS+0.025 flojo → observe"),
+                       _orb("media", observe=True, note="candidato; vigilar")],
+    "ETH/USDT:USDT":  [_vwap("media", observe=True, note="OOS+0.111 / 2026+0.041 marginal → observe")],
+    "DOT/USDT:USDT":  [_orb("media", observe=True, note="OOS+0.106 / 2026-0.069 falla reciente → observe")],
 }
+
+# PODADOS (negativos en AMBOS regímenes OOS — sin edge, retirados de la cartera):
+#   BTC vwap_anchor  (OOS-0.014 / 2026-0.041)
+#   DOGE vwap_anchor (OOS-0.234 / 2026-0.186)
+#   XRP vwap_anchor  (OOS-0.249 / 2026-0.257)
 
 
 def core_symbols() -> list[str]:
