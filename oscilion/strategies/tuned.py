@@ -11,18 +11,17 @@
 #              anti-correlacionado con los largos → gran diversificador).
 #   gold     → oro, descorrelacionado del cripto.
 
+# DEMOTE 06-29: toda la familia vwap_anchor (largo-only de continuación) salió de
+# capital → observe. En vivo sangró −11R comprando trampas alcistas en alts cayendo,
+# sin gate de régimen. Vuelve a capital sólo si prueba forward positivo con el filtro
+# de régimen de mercado puesto. Capital cae de 17 → 12 combos.
 WEIGHTS = {
-    'TRX/USDT:USDT|vwap_anchor': 1.0,
     'TRX/USDT:USDT|ema_trend_stack': 1.0,
     'TRX/USDT:USDT|orb_breakout': 1.0,
     'TRX/USDT:USDT|break_retest': 1.0,
     'LINK/USDT:USDT|orb_breakout': 1.0,
     'XRP/USDT:USDT|orb_breakout': 1.0,
     'DOGE/USDT:USDT|orb_breakout': 1.0,
-    'BNB/USDT:USDT|vwap_anchor': 1.0,
-    'AVAX/USDT:USDT|vwap_anchor': 1.0,
-    'TIA/USDT:USDT|vwap_anchor': 1.0,
-    'ATOM/USDT:USDT|vwap_anchor': 1.0,
     'RUNE/USDT:USDT|break_retest': 1.0,
     'NEO/USDT:USDT|break_retest': 1.0,
     'FLOW/USDT:USDT|break_retest': 1.0,
@@ -32,17 +31,12 @@ WEIGHTS = {
 }
 
 CLUSTERS = {
-    'TRX/USDT:USDT|vwap_anchor': 'trx',
     'TRX/USDT:USDT|ema_trend_stack': 'trx',
     'TRX/USDT:USDT|orb_breakout': 'trx',
     'TRX/USDT:USDT|break_retest': 'trx',
     'LINK/USDT:USDT|orb_breakout': 'altlong',
     'XRP/USDT:USDT|orb_breakout': 'altlong',
     'DOGE/USDT:USDT|orb_breakout': 'altlong',
-    'BNB/USDT:USDT|vwap_anchor': 'altlong',
-    'AVAX/USDT:USDT|vwap_anchor': 'altlong',
-    'TIA/USDT:USDT|vwap_anchor': 'altlong',
-    'ATOM/USDT:USDT|vwap_anchor': 'altlong',
     'RUNE/USDT:USDT|break_retest': 'altbreak',
     'NEO/USDT:USDT|break_retest': 'altbreak',
     'FLOW/USDT:USDT|break_retest': 'altbreak',

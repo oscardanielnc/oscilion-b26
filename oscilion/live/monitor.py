@@ -20,7 +20,9 @@ import numpy as np
 
 from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS
+from oscilion.backtest.resample import resample_ohlcv
 from oscilion.data import fetch, store
+from oscilion.features import indicators as ind
 from oscilion.live import forward, guards
 from oscilion.notify import notify
 from oscilion.persistence import db
@@ -54,15 +56,19 @@ class _PosState:
 
 class LiveMonitor:
     def __init__(self, *, refresh_data: bool = True, capital: float = 10_000.0,
-                 forward_every_ticks: int = 240, snapshot_every_ticks: int = 60):
+                 forward_every_ticks: int = 240, snapshot_every_ticks: int = 60,
+                 funding_every_ticks: int = 480):
         self.refresh_data = refresh_data
         self.capital = capital
         self.forward_every_ticks = forward_every_ticks      # ~cada N ticks refresca forward
         self.snapshot_every_ticks = snapshot_every_ticks    # ~cada N ticks deja snapshot (≈horario)
+        self.funding_every_ticks = funding_every_ticks      # ~cada 8h refresca funding (settlement)
         self.assignments = all_assignments()
         self.symbols = sorted({s for s, _a in self.assignments})
         self._ticks = 0
         self._daily_halt_notified = None    # día UTC ya notificado del freno diario
+        self._mkt_tick = -1                 # cache de régimen de mercado por tick
+        self._mkt_bull = None
         # rehidratar estado persistido (sobrevive reinicios → forward-test sin huecos)
         db.init_db()
         saved = db.load_monitor_states()
@@ -97,6 +103,36 @@ class LiveMonitor:
             if not df.empty:
                 store.save_bars(sym, tf, df)
 
+    def _refresh_funding(self, sym: str) -> None:
+        # el funding se liquida cada 8h: el _refresh por-tick (OHLCV) NO lo tocaba,
+        # así que el parquet quedaba congelado en el último sync_all y los trades
+        # vivos cerraban con fund=0 (auditoría 06-29). Lo refrescamos por cadencia.
+        since = fetch._now_ms() - 10 * 86_400_000
+        f = fetch.fetch_funding(sym, since=since)
+        if not f.empty:
+            store.save_funding(sym, f)
+
+    def _market_bull(self) -> bool | None:
+        """Régimen del benchmark (BTC): True alcista (close>EMA en TF alto), False
+        bajista, None si no hay datos. Cacheado por tick (lo consultan N entradas)."""
+        if self._mkt_tick == self._ticks:
+            return self._mkt_bull
+        self._mkt_tick = self._ticks
+        self._mkt_bull = None
+        try:
+            bars = store.load_bars(config.market_benchmark, "1h")
+            if bars.empty or len(bars) < 60:
+                return None
+            tf = config.market_regime_tf_h
+            df = resample_ohlcv(bars, tf) if tf > 1 else bars
+            if len(df) < config.market_regime_ema + 2:
+                return None
+            ema = ind.ema(df["close"], config.market_regime_ema).to_numpy()
+            self._mkt_bull = bool(df["close"].to_numpy()[-1] > ema[-1])
+        except Exception:
+            log.exception("market regime %s", config.market_benchmark)
+        return self._mkt_bull
+
     # ------------------------------ tick -------------------------------
     def step(self) -> list[dict]:
         self._ticks += 1
@@ -115,6 +151,16 @@ class LiveMonitor:
                 forward.refresh()
             except Exception:
                 log.exception("forward refresh")
+
+        # funding por cadencia (~8h): mantiene el parquet al día para que el cierre
+        # de trades descuente el funding real y no lo dé por 0.
+        if self.refresh_data and self.funding_every_ticks and \
+                self._ticks % self.funding_every_ticks == 1:
+            for sym in self.symbols:
+                try:
+                    self._refresh_funding(sym)
+                except Exception:
+                    log.exception("refresh funding %s", sym)
 
         for sym, a in self.assignments:
             try:
@@ -201,6 +247,29 @@ class LiveMonitor:
             db.log_event("WARN", "live.monitor",
                          f"{sym} {a.strategy}: stop_pct {stop_pct:.4%} < piso "
                          f"{config.min_stop_pct:.2%} — no se abre (notional absurdo)")
+            return None
+
+        # filtro de COSTO (auditoría 06-29): un stop muy apretado infla el notional y
+        # las comisiones se comen la R (oro/TRX). Si el costo round-trip estimado supera
+        # el tope, el trade no puede pagar su edge → fuera (capital u observe por igual).
+        cost_r = DEFAULT_COSTS.round_trip_cost_r(stop_pct)
+        if cost_r > config.max_cost_r:
+            db.log_event("WARN", "live.monitor",
+                         f"{sym} {a.strategy}: costo {cost_r:.1%} de R > tope "
+                         f"{config.max_cost_r:.0%} (stop {stop_pct:.2%} muy apretado) — no se abre")
+            db.log_decision(sym, "no-entrar", f"costo-tóxico: {cost_r:.1%} de R (stop {stop_pct:.2%})")
+            return None
+
+        # filtro de RÉGIMEN DE MERCADO (auditoría 06-29): no operar a favor de la beta
+        # cuando el mercado base va en contra del lado del trade (oro exento). Bloquea
+        # las trampas alcistas que costaron −11R en vwap_anchor.
+        exempt = P.cluster_of(sym, a.strategy) == "gold"
+        regime_block = guards.market_regime_block(
+            side, self._market_bull(), enabled=config.market_regime_filter, exempt=exempt)
+        if regime_block is not None:
+            db.log_event("INFO", "live.monitor",
+                         f"{sym} {a.strategy}: régimen — {regime_block} — no se abre")
+            db.log_decision(sym, "no-entrar", f"régimen mercado: {regime_block}")
             return None
 
         # gate de validación (FORWARD_REVIEW #1): sin evidencia local suficiente
@@ -336,7 +405,8 @@ class LiveMonitor:
             }
         db.log_trade(sym, side, config.mode.value, entry=entry_px, stop=pos["init_stop"],
                      tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=notional,
-                     strategy=pos["strategy"], r_multiple=R, pnl=pnl, funding=fund,
+                     strategy=pos["strategy"], r_multiple=R, pnl=pnl,
+                     fees=pos["entry_fee"] + exit_fee, funding=fund,
                      observe=observe, exit_reason=reason, cost_audit=audit)
         if reason == "stop":
             kind, icon = "SAL", "🔴"

@@ -32,6 +32,19 @@ class CostModel:
         buying = (side == "long" and is_entry) or (side == "short" and not is_entry)
         return price + slip if buying else price - slip
 
+    def round_trip_cost_r(self, stop_pct: float) -> float:
+        """Costo round-trip estimado en unidades de R para un stop a `stop_pct`.
+
+        Asume taker en entrada y salida (peor caso = el trade muere en el stop).
+        fees y slippage son ~constantes en precio, pero el notional (= riesgo/stop_pct)
+        crece al estrechar el stop, así que el costo en R domina con stops apretados:
+            cost_R = (2·taker_fee + slippage) / stop_pct
+        Coincide con la descomposición de `cost_audit` (r_fee_entry+r_fee_exit+r_slip).
+        """
+        if stop_pct <= 0:
+            return float("inf")
+        return (2 * self.taker_fee + self.slippage_bps / 10_000) / stop_pct
+
     def funding(self, notional: float, side: str, rate: float) -> float:
         """Costo de funding (positivo = lo paga el trader)."""
         sign = 1.0 if side == "long" else -1.0

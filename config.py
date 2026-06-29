@@ -58,6 +58,13 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_bool(key: str, default: bool) -> bool:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on", "si", "sí")
+
+
 def _env_list(key: str, default: list[str]) -> list[str]:
     raw = os.getenv(key)
     if not raw:
@@ -107,6 +114,22 @@ class Config:
     # Piso de distancia de stop: por debajo el notional/apalancamiento se dispara
     # (riesgo fijo / stop→0). Con stops ≥1×ATR casi nunca aplica: es red de seguridad.
     min_stop_pct: float = _env_float("OSCILION_MIN_STOP_PCT", 0.002)      # 0.2%
+
+    # --- filtro de costo (auditoría 06-29): el costo round-trip en R = (2·taker +
+    # slip)/stop_pct. Con stop apretado el notional explota y las comisiones devoran
+    # la R (XAU stop 0.38% ⇒ −0.24R por trade; TRX 0.67% ⇒ −0.13R). Rechaza entradas
+    # cuyo costo estimado supere este tope (kill de combos costo-tóxicos como el oro).
+    max_cost_r: float = _env_float("OSCILION_MAX_COST_R", 0.12)           # 12% de R
+
+    # --- gate de RÉGIMEN DE MERCADO (auditoría 06-29): las 17 entradas vwap_anchor en
+    # vivo fueron LONG en una quincena de alts cayendo → trampas alcistas (−11R). Un
+    # largo de continuación NO debe dispararse con el mercado base en tendencia bajista
+    # (ni un short con el mercado alcista). Benchmark = BTC vs su EMA en TF alto. El oro
+    # (clúster 'gold') queda EXENTO: está descorrelacionado del cripto.
+    market_regime_filter: bool = _env_bool("OSCILION_MKT_REGIME", True)
+    market_benchmark: str = os.getenv("OSCILION_MKT_BENCH", "BTC/USDT:USDT")
+    market_regime_tf_h: int = _env_int("OSCILION_MKT_TF_H", 4)            # TF del régimen
+    market_regime_ema: int = _env_int("OSCILION_MKT_EMA", 50)             # EMA de tendencia
 
     # --- gate de validación (FORWARD_REVIEW #1): un combo sym×estrategia solo
     # opera con capital si SU backtest local (motor honesto, forward_results)
