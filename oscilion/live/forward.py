@@ -18,8 +18,9 @@ import numpy as np
 from config import config
 from oscilion.backtest.engine_strat import StratParams, backtest_symbol_strat
 from oscilion.data import store
+from oscilion.features import market_regime
 from oscilion.persistence import db
-from oscilion.strategies import all_assignments
+from oscilion.strategies import all_assignments, portfolio as P
 
 log = logging.getLogger(__name__)
 
@@ -42,13 +43,24 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
     """Recalcula y persiste el snapshot backtest/forward por sym×strategy."""
     inception = inception_ms or config.forward_inception_ms
     db.init_db()
+    # régimen de mercado (benchmark) — se carga UNA vez y se reusa por combo (no-oro),
+    # para que forward_results refleje el filtro que aplica el monitor en vivo.
+    reg_ts, reg_bull = np.array([]), np.array([], dtype=bool)
+    if config.market_regime_filter:
+        reg_ts, reg_bull = market_regime.regime_series(
+            store.load_bars(config.market_benchmark, config.base_timeframe),
+            config.market_regime_tf_h, config.market_regime_ema)
     out: list[dict] = []
     dark: list[str] = []
     for sym, a in all_assignments():
+        exempt = P.cluster_of(sym, a.strategy) == "gold"
+        use_regime = config.market_regime_filter and not exempt
         try:
             trades = backtest_symbol_strat(sym, StratParams(
                 strategy=a.strategy, params=a.params,
-                max_hold_signal_bars=a.max_hold_signal_bars))
+                max_hold_signal_bars=a.max_hold_signal_bars,
+                regime_close_ts=reg_ts if use_regime else np.array([]),
+                regime_bull=reg_bull if use_regime else np.array([], dtype=bool)))
         except Exception:
             log.exception("forward refresh falló %s %s", sym, a.strategy)
             continue

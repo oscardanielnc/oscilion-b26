@@ -10,26 +10,56 @@ from __future__ import annotations
 from config import config
 
 
+def _ev(stats: dict | None) -> tuple[int, float | None]:
+    """(n, exp_r) tolerante a None."""
+    if not stats:
+        return 0, None
+    return int(stats.get("n") or 0), stats.get("exp_r")
+
+
 def gate_decision(bt_stats: dict | None, observe_only: bool,
-                  *, min_n: int | None = None,
-                  min_exp_r: float | None = None) -> tuple[bool, str | None]:
+                  *, fw_stats: dict | None = None,
+                  min_n: int | None = None, min_exp_r: float | None = None,
+                  fw_kill_n: int | None = None, fw_kill_exp_r: float | None = None,
+                  fw_grad_n: int | None = None,
+                  fw_grad_exp_r: float | None = None) -> tuple[bool, str | None]:
     """Decide si un combo sym×estrategia opera con capital.
 
-    `bt_stats` = fila de forward_results scope='backtest' (motor honesto sobre
-    los datos locales): el gate usa la evidencia REAL disponible en esta máquina,
-    no números de research que el histórico local quizá no respalda (el caso
-    DOGE/vwap n=1 del primer ciclo).
+    `bt_stats` = fila de forward_results scope='backtest' (motor honesto, OOS):
+    evidencia local, no números de research que el histórico local quizá no
+    respalda (el caso DOGE/vwap n=1 del primer ciclo).
+    `fw_stats` = scope='forward' (OOS post-inception, con filtros de régimen/costo):
+    el EDGE REAL reciente. Cierra el lazo que faltaba (auditoría 06-29: observe le
+    ganaba a capital porque el gate nunca miraba el forward).
+
+    Prioridad: forward real (kill/graduación) MANDA sobre el backtest, porque mide
+    cómo opera el combo HOY. Sin muestra forward suficiente, decide el backtest.
 
     Devuelve (observe, reason): observe=True → trade virtual SIN capital.
     """
-    if observe_only:
-        return True, "observe_only (asignación)"
     min_n = config.gate_min_n if min_n is None else min_n
     min_exp_r = config.gate_min_exp_r if min_exp_r is None else min_exp_r
+    fw_kill_n = config.gate_fw_kill_n if fw_kill_n is None else fw_kill_n
+    fw_kill_exp_r = config.gate_fw_kill_exp_r if fw_kill_exp_r is None else fw_kill_exp_r
+    fw_grad_n = config.gate_fw_grad_n if fw_grad_n is None else fw_grad_n
+    fw_grad_exp_r = config.gate_fw_grad_exp_r if fw_grad_exp_r is None else fw_grad_exp_r
+
+    fw_n, fw_exp = _ev(fw_stats)
+
+    if observe_only:
+        # GRADUACIÓN: el forward real confirma edge con holgura → sube a capital.
+        if fw_n >= fw_grad_n and fw_exp is not None and fw_exp >= fw_grad_exp_r:
+            return False, None
+        return True, "observe_only (asignación)"
+
+    # KILL-SWITCH: el forward real ya demostró que el combo sangra → corta capital.
+    if fw_n >= fw_kill_n and fw_exp is not None and fw_exp <= fw_kill_exp_r:
+        return True, f"forward kill: exp_R={fw_exp:+.3f} (n={fw_n}) ≤ {fw_kill_exp_r:+.2f}"
+
+    # gate de backtest (OOS) — el filtro base cuando el forward aún no es decisivo.
     if not bt_stats:
         return True, "gate: sin backtest local (forward_results vacío)"
-    n = int(bt_stats.get("n") or 0)
-    exp_r = bt_stats.get("exp_r")
+    n, exp_r = _ev(bt_stats)
     if n < min_n:
         return True, f"gate: n={n} < {min_n}"
     if exp_r is None or exp_r <= min_exp_r:

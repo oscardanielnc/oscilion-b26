@@ -183,20 +183,25 @@ def capital_pnl_since(since_ms: int) -> float:
         return 0.0
 
 
-def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
-    """Stats del backtest LOCAL (motor honesto) para el gate de validación.
-    None si aún no hay snapshot (forward.refresh no corrió) → el gate bloquea."""
+def get_forward_result(sym: str, strategy: str, scope: str) -> Optional[dict]:
+    """Stats persistidas del motor honesto para un scope ('backtest' | 'forward').
+    None si aún no hay snapshot (forward.refresh no corrió)."""
     try:
         with _lock:
             row = get_connection().execute(
                 "SELECT n, win_rate, exp_r, sum_r FROM forward_results"
-                " WHERE sym=? AND strategy=? AND scope='backtest'",
-                (sym, strategy),
+                " WHERE sym=? AND strategy=? AND scope=?",
+                (sym, strategy, scope),
             ).fetchone()
         return dict(row) if row else None
     except Exception:
-        log.exception("Fallo get_forward_backtest %s %s", sym, strategy)
+        log.exception("Fallo get_forward_result %s %s %s", sym, strategy, scope)
         return None
+
+
+def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
+    """Stats del backtest LOCAL (OOS) para el gate. None → el gate bloquea."""
+    return get_forward_result(sym, strategy, "backtest")
 
 
 def log_params(version: str, params: dict) -> Optional[int]:

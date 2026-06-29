@@ -146,6 +146,19 @@ class Config:
     gate_backtest_from_ms: int = _env_int(
         "OSCILION_GATE_BT_FROM_MS", 1735689600000  # 2025-01-01 UTC
     )
+    # --- gate ADAPTATIVO (auditoría 06-29): el gate de backtest NO cierra el lazo
+    # con la realidad → en vivo el libro 'observe' (+1.77R) le ganó al 'capital'
+    # (−16.85R). El gate ahora también mira el FORWARD del motor honesto (scope
+    # 'forward', OOS post-inception, ya con filtros de régimen/costo):
+    #   • KILL-SWITCH: un combo con capital cuyo forward real ya demostró que sangra
+    #     (n ≥ kill_n y exp_R ≤ kill_exp_r) se degrada a observe — deja de perder.
+    #   • GRADUACIÓN: un observe cuyo forward confirma edge (n ≥ grad_n y exp_R ≥
+    #     grad_exp_r) sube a capital — cumple lo que el código prometía y no hacía.
+    # n altos: hace falta muestra forward real para actuar (no reacciona al ruido).
+    gate_fw_kill_n: int = _env_int("OSCILION_GATE_FW_KILL_N", 15)
+    gate_fw_kill_exp_r: float = _env_float("OSCILION_GATE_FW_KILL_EXP_R", -0.10)
+    gate_fw_grad_n: int = _env_int("OSCILION_GATE_FW_GRAD_N", 20)
+    gate_fw_grad_exp_r: float = _env_float("OSCILION_GATE_FW_GRAD_EXP_R", 0.10)
 
     # --- señal vencida (FORWARD_REVIEW sesión/stale): si la vela de señal cerró
     # hace más de esto, NO se entra (el precio de referencia ya es viejo; pasa
