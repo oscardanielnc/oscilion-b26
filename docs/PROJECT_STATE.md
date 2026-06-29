@@ -1,4 +1,60 @@
-# Estado del proyecto Oscilion — v0.7 (cartera v2)
+# Estado del proyecto Oscilion — v0.8 (auditoría forward + gate adaptativo)
+
+**Actualizado:** 2026-06-29 (auditoría del forward en vivo 1ª semana + filtros de régimen/
+costo + gate adaptativo forward-aware). Lee también `AUDIT_2026-06-22.md`, `FORWARD_REVIEW.md`,
+`STRATEGY_MAP.md`. El bloque v0.7 (abajo) queda como histórico.
+
+---
+
+## 🆕 v0.8 (2026-06-29) — auditoría del forward en vivo
+
+> **Una línea:** la 1ª semana en vivo dio libro de capital **−16.85R / 16% win**. Disección:
+> (a) vwap_anchor (largo-only) sangró −11R comprando trampas alcistas en alts cayendo, SIN
+> guardia de régimen; (b) stops apretados (oro/TRX) costo-tóxicos; (c) el gate **nunca miraba
+> el forward real** → observe (+1.77R) le ganaba a capital. Cinco correcciones, todo medido
+> con el motor honesto + tests (37/37).
+
+**Qué cambió (commits `8b8c8e1` · `27a4a5f` · `5b46c76`):**
+
+1. **Gate de régimen de mercado** (`features/market_regime.py`, fuente única live+backtest):
+   no operar A FAVOR de la beta cuando el benchmark (BTC vs EMA50 4h) va EN CONTRA del lado.
+   Backtest OFF→ON: **W1-2025 neutro (+0.087→+0.088), W2-2026 +0.357→+0.632 (+77%)** — paga en
+   régimen hostil, no daña en benigno. `research/regime_backtest.py`.
+2. **Exención anti-beta**: break_retest y el oro (PAXG/XAU por símbolo) EXENTOS — su edge es
+   anti-beta (shorts en alts que caen independientes de BTC); un filtro de beta los rompe
+   (FLOW perdía 3 shorts ganadores +4.42R). `portfolio.regime_exempt()`.
+3. **Filtro de costo** (`CostModel.round_trip_cost_r`, `max_cost_r=0.12`): rechaza entradas
+   con costo round-trip > 12% de R (stops apretados ⇒ notional alto ⇒ fees devoran la R;
+   XAU −0.24R, TRX −0.14R por trade). Saca al oro del libro.
+4. **Gate ADAPTATIVO forward-aware** (`guards.gate_decision`): cierra el lazo con la realidad.
+   - **KILL-SWITCH**: capital cuyo forward real sangra (n≥15, exp_R≤−0.10) → observe.
+   - **GRADUACIÓN**: observe cuyo forward confirma (n≥20, exp_R≥+0.10) → capital (antes el
+     código lo prometía y NO lo hacía).
+   - **ROBUSTO recency-aware**: la ventana OOS RECIENTE (2026, n≥20) no puede decaer. NO exige
+     ambas ventanas positivas — eso mataría el alpha emergente (RUNE/NEO: −0.23 en 2025 pero
+     +1.07 en 2026). forward.refresh persiste scopes `oos_a`/`oos_b`.
+5. **Higiene**: `_refresh_funding` por cadencia (~8h; antes el parquet quedaba congelado y los
+   trades cerraban con fund=0) + columna `fees` poblada en `log_trade`.
+
+**Portfolio EFECTIVO tras el gate (preview con stats reales): 17 → 8 con capital**, 15 observe.
+
+| Clúster | Capital efectivo | Nota |
+|---|---|---|
+| `trx` | TRX × {ema, orb, break_retest} | vwap demovido a observe |
+| `altlong` | XRP orb | LINK/DOGE orb a observe (n<30 tras filtro régimen) |
+| `altbreak` | RUNE, NEO, FLOW, HBAR break_retest | alpha anti-beta, exento de régimen, +1.07/+1.02 en 2026 |
+| `gold` | — | XAU/PAXG a observe (n<30 / costo-tóxico) |
+
+**Toda la familia vwap_anchor → observe** (sangró en vivo). Se **re-gradúa sola** si su forward
+con el filtro de régimen confirma (n≥20, exp_R≥+0.10) — exactamente "probar antes de
+recapitalizar". El sistema ahora se auto-corrige sin intervención.
+
+**Riesgo abierto #1 (sin cambios):** sizing 2%/trade ⇒ MaxDD backtest ~−60%. Diferido: en
+dry-run todo se mide en R. Bajar a ~0.5% (medio-Kelly) ANTES de capital real.
+
+---
+
+## 📦 v0.7 (2026-06-22) — cartera v2 (histórico)
 
 **Actualizado:** 2026-06-22 (auditoría fuerte + reconstrucción de cartera por edge OOS +
 anti-beta + ampliación de universo). Lee también `AUDIT_2026-06-22.md` (la auditoría
