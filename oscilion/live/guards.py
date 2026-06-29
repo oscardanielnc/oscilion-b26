@@ -19,10 +19,12 @@ def _ev(stats: dict | None) -> tuple[int, float | None]:
 
 def gate_decision(bt_stats: dict | None, observe_only: bool,
                   *, fw_stats: dict | None = None,
+                  sub_windows: list[dict | None] | None = None,
                   min_n: int | None = None, min_exp_r: float | None = None,
                   fw_kill_n: int | None = None, fw_kill_exp_r: float | None = None,
-                  fw_grad_n: int | None = None,
-                  fw_grad_exp_r: float | None = None) -> tuple[bool, str | None]:
+                  fw_grad_n: int | None = None, fw_grad_exp_r: float | None = None,
+                  robust: bool | None = None,
+                  robust_min_n: int | None = None) -> tuple[bool, str | None]:
     """Decide si un combo sym×estrategia opera con capital.
 
     `bt_stats` = fila de forward_results scope='backtest' (motor honesto, OOS):
@@ -43,6 +45,8 @@ def gate_decision(bt_stats: dict | None, observe_only: bool,
     fw_kill_exp_r = config.gate_fw_kill_exp_r if fw_kill_exp_r is None else fw_kill_exp_r
     fw_grad_n = config.gate_fw_grad_n if fw_grad_n is None else fw_grad_n
     fw_grad_exp_r = config.gate_fw_grad_exp_r if fw_grad_exp_r is None else fw_grad_exp_r
+    robust = config.gate_robust if robust is None else robust
+    robust_min_n = config.gate_robust_min_n if robust_min_n is None else robust_min_n
 
     fw_n, fw_exp = _ev(fw_stats)
 
@@ -65,6 +69,16 @@ def gate_decision(bt_stats: dict | None, observe_only: bool,
     if exp_r is None or exp_r <= min_exp_r:
         er = "—" if exp_r is None else f"{exp_r:+.3f}"
         return True, f"gate: exp_R={er} ≤ {min_exp_r:+.2f}"
+    # robustez RECENCY-AWARE: la ventana OOS MÁS RECIENTE (sub_windows[-1]) no puede
+    # estar decayendo. Bloquea el caso peligroso (+0.30 viejo / −0.20 reciente = edge
+    # que se apaga) PERO permite el alpha EMERGENTE/regime-específico (−0.20 viejo /
+    # +1.07 reciente), que es la tesis del proyecto (break_retest gana cuando los alts
+    # caen, fenómeno reciente). Promediar ambas o exigir las dos positivas lo mataría.
+    if robust and sub_windows:
+        wn, wexp = _ev(sub_windows[-1])
+        if wn >= robust_min_n and (wexp is None or wexp <= min_exp_r):
+            we = "—" if wexp is None else f"{wexp:+.3f}"
+            return True, f"gate robusto: OOS reciente exp_R={we} ≤ {min_exp_r:+.2f} (n={wn}) — edge decae"
     return False, None
 
 

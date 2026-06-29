@@ -69,6 +69,44 @@ def test_gate_graduacion_no_dispara_con_forward_flojo():
     assert obs2                                   # n < grad → sigue observe
 
 
+# ------------------- gate ROBUSTO recency-aware (06-29) -------------------
+_RW = dict(min_n=30, min_exp_r=0.05, robust=True, robust_min_n=20)
+_BT_OK = {"n": 60, "exp_r": 0.30}
+
+
+def test_gate_robusto_corta_edge_que_decae():
+    """+0.30 agregado pero la ventana RECIENTE ya está negativa → observe."""
+    obs, reason = guards.gate_decision(_BT_OK, False,
+                                       sub_windows=[{"n": 30, "exp_r": 0.5},
+                                                    {"n": 25, "exp_r": -0.2}], **_RW)
+    assert obs and "OOS reciente" in reason
+
+
+def test_gate_robusto_permite_alpha_emergente():
+    """−0.23 viejo / +1.07 reciente (RUNE break_retest): el alpha emergente PASA."""
+    obs, reason = guards.gate_decision(_BT_OK, False,
+                                       sub_windows=[{"n": 30, "exp_r": -0.23},
+                                                    {"n": 22, "exp_r": 1.07}], **_RW)
+    assert not obs and reason is None
+
+
+def test_gate_robusto_ignora_ventana_reciente_con_n_chico():
+    """Ventana reciente negativa pero muestra insuficiente → no bloquea."""
+    obs, reason = guards.gate_decision(_BT_OK, False,
+                                       sub_windows=[{"n": 30, "exp_r": 0.5},
+                                                    {"n": 8, "exp_r": -0.9}], **_RW)
+    assert not obs and reason is None
+
+
+# ------------------- exención anti-beta del filtro de régimen (06-29) -------------------
+def test_regime_exempt_anti_beta_y_oro():
+    from oscilion.strategies import portfolio as P
+    assert P.regime_exempt("FLOW/USDT:USDT", "break_retest")      # anti-beta
+    assert P.regime_exempt("PAXG/USDT:USDT", "ema_trend_stack")   # oro (clúster gold)
+    assert not P.regime_exempt("AVAX/USDT:USDT", "vwap_anchor")   # beta largo → SÍ filtra
+    assert not P.regime_exempt("LINK/USDT:USDT", "orb_breakout")  # beta → SÍ filtra
+
+
 # ------------------------------ señal vencida ------------------------------
 def test_senal_fresca_pasa_y_vieja_no():
     now = 1_900_000_000_000

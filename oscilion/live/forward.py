@@ -53,8 +53,7 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
     out: list[dict] = []
     dark: list[str] = []
     for sym, a in all_assignments():
-        exempt = P.cluster_of(sym, a.strategy) == "gold"
-        use_regime = config.market_regime_filter and not exempt
+        use_regime = config.market_regime_filter and not P.regime_exempt(sym, a.strategy)
         try:
             trades = backtest_symbol_strat(sym, StratParams(
                 strategy=a.strategy, params=a.params,
@@ -77,7 +76,12 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
             gate_from = 0
         bt = _stats([t for t in trades if gate_from <= t["entry_ts"] < inception])
         fw = _stats([t for t in trades if t["entry_ts"] >= inception])
-        for scope, s in (("backtest", bt), ("forward", fw)):
+        # sub-ventanas OOS para el gate ROBUSTO: 2025 vs 2026-YTD (hasta inception).
+        # Que el gate exija edge en AMBOS regímenes, no solo en el promedio.
+        split = config.gate_robust_split_ms
+        oos_a = _stats([t for t in trades if gate_from <= t["entry_ts"] < min(split, inception)])
+        oos_b = _stats([t for t in trades if split <= t["entry_ts"] < inception])
+        for scope, s in (("backtest", bt), ("forward", fw), ("oos_a", oos_a), ("oos_b", oos_b)):
             db.upsert_forward_result(sym, a.strategy, scope, **s)
         out.append({"sym": sym, "strategy": a.strategy, "backtest": bt, "forward": fw})
     if dark:

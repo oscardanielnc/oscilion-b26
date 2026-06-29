@@ -59,7 +59,7 @@ def main():
 
     agg = {}  # (window, on/off) -> [sumR, n]
     for sym, a in all_assignments():
-        exempt = P.cluster_of(sym, a.strategy) == "gold"
+        exempt = P.regime_exempt(sym, a.strategy)
         bundle = load_bundle(sym, a.strategy)
         if bundle is None:
             continue
@@ -74,7 +74,7 @@ def main():
             off, on = _stats(t_off, lo, hi), _stats(t_on, lo, hi)
             dexp = (on["exp"] - off["exp"]) if (on["exp"] is not None and off["exp"] is not None) else None
             dtxt = f"{dexp:+.3f}" if dexp is not None else "—"
-            tag = " (oro=exento)" if exempt else ""
+            tag = " (anti-beta=exento)" if exempt else ""
             print(f"{label:<26}{wname:<5}│ {_fmt(off):<22}│ {_fmt(on):<22}│ {dtxt}{tag}")
             for key, st in ((("off", wname), off), (("on", wname), on)):
                 agg.setdefault(key, [0.0, 0])
