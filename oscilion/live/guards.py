@@ -38,6 +38,25 @@ def gate_decision(bt_stats: dict | None, observe_only: bool,
     return False, None
 
 
+def market_regime_block(side: str, market_bull: bool | None, *,
+                        enabled: bool = True, exempt: bool = False) -> str | None:
+    """Beta-filtro de régimen: no operar A FAVOR de la beta cuando el mercado base
+    va EN CONTRA del lado del trade. Largo de continuación con mercado bajista =
+    trampa alcista (las 17 vwap de la auditoría 06-29); short con mercado alcista,
+    simétrico. Devuelve la razón del bloqueo, o None si la entrada está permitida.
+
+    `market_bull` None ⇒ régimen desconocido (sin datos) → no bloquea (fail-open).
+    `exempt` True ⇒ activo descorrelacionado del benchmark (oro) → no aplica.
+    """
+    if not enabled or exempt or market_bull is None:
+        return None
+    if side == "long" and not market_bull:
+        return "mercado bajista (benchmark<EMA) contra LONG"
+    if side == "short" and market_bull:
+        return "mercado alcista (benchmark>EMA) contra SHORT"
+    return None
+
+
 def is_fresh(sig_close_ms: int, now_ms: int, max_age_min: int | None = None) -> bool:
     """True si la vela de señal cerró hace poco. Una señal vieja (downtime,
     refresh fallido) entraría a un precio de referencia vencido — y puede

@@ -48,6 +48,28 @@ def test_stop_pct_piso():
     assert not guards.stop_pct_ok(0.0001, min_stop_pct=0.002)  # stop 0.01% → notional 200×
 
 
+# ------------------------- régimen de mercado (06-29) -------------------------
+def test_regimen_bloquea_largo_en_bajista_y_short_en_alcista():
+    assert guards.market_regime_block("long", False) is not None    # trampa alcista
+    assert guards.market_regime_block("short", True) is not None     # short contra tendencia
+    assert guards.market_regime_block("long", True) is None          # largo con mercado alcista ok
+    assert guards.market_regime_block("short", False) is None        # short con mercado bajista ok
+
+
+def test_regimen_exento_y_desconocido_no_bloquean():
+    assert guards.market_regime_block("long", False, exempt=True) is None     # oro descorrelacionado
+    assert guards.market_regime_block("long", None) is None                   # sin datos = fail-open
+    assert guards.market_regime_block("long", False, enabled=False) is None   # filtro apagado
+
+
+# ------------------------- costo round-trip en R (06-29) -------------------------
+def test_costo_toxico_stops_apretados():
+    from oscilion.backtest.costs import DEFAULT_COSTS
+    assert DEFAULT_COSTS.round_trip_cost_r(0.0038) > 0.12     # XAU oro: ~0.24R → bloqueado
+    assert DEFAULT_COSTS.round_trip_cost_r(0.034) < 0.12      # AVAX stop ancho: ~0.03R → pasa
+    assert DEFAULT_COSTS.round_trip_cost_r(0.0) == math.inf   # stop 0 = notional infinito
+
+
 # ------------------------------ veto por símbolo ------------------------------
 class _St:
     def __init__(self, position):
