@@ -130,6 +130,16 @@ class Config:
     market_benchmark: str = os.getenv("OSCILION_MKT_BENCH", "BTC/USDT:USDT")
     market_regime_tf_h: int = _env_int("OSCILION_MKT_TF_H", 4)            # TF del régimen
     market_regime_ema: int = _env_int("OSCILION_MKT_EMA", 50)             # EMA de tendencia
+    # Estrategias EXENTAS del filtro de régimen: las ANTI-BETA. break_retest gana
+    # shorteando alts que caen INDEPENDIENTES de BTC (alpha, no beta) — un filtro de
+    # beta le mata shorts ganadores (FLOW: −0.48 exp_R, 3 shorts +4.42R cortados).
+    regime_exempt_strategies: list[str] = field(
+        default_factory=lambda: _env_list("OSCILION_REGIME_EXEMPT", ["break_retest"]))
+    # Símbolos EXENTOS por descorrelación del benchmark cripto (oro). Por SÍMBOLO,
+    # no por clúster: PAXG/ema es observe y no está en el dict de clústeres, así que
+    # un check por clúster lo dejaría escapar y le aplicaría el régimen de BTC (mal).
+    regime_exempt_symbols: list[str] = field(default_factory=lambda: _env_list(
+        "OSCILION_REGIME_EXEMPT_SYMS", ["PAXG/USDT:USDT", "XAU/USDT:USDT"]))
 
     # --- gate de validación (FORWARD_REVIEW #1): un combo sym×estrategia solo
     # opera con capital si SU backtest local (motor honesto, forward_results)
@@ -159,6 +169,17 @@ class Config:
     gate_fw_kill_exp_r: float = _env_float("OSCILION_GATE_FW_KILL_EXP_R", -0.10)
     gate_fw_grad_n: int = _env_int("OSCILION_GATE_FW_GRAD_N", 20)
     gate_fw_grad_exp_r: float = _env_float("OSCILION_GATE_FW_GRAD_EXP_R", 0.10)
+    # --- gate ROBUSTO recency-aware (auditoría 06-29): el backtest agregado deja
+    # pasar un combo cuyo edge ya DECAYÓ (+0.30 viejo / −0.20 reciente: el promedio
+    # engaña). Exige que la ventana OOS MÁS RECIENTE (2026-YTD) con muestra suficiente
+    # (n ≥ robust_min_n) no sea negativa. NO exige las dos positivas: eso mataría el
+    # alpha emergente (break_retest gana cuando los alts caen, fenómeno de 2026). El
+    # split parte el OOS [2025, inception) en 2025 vs 2026-YTD.
+    gate_robust: bool = _env_bool("OSCILION_GATE_ROBUST", True)
+    gate_robust_min_n: int = _env_int("OSCILION_GATE_ROBUST_MIN_N", 20)
+    gate_robust_split_ms: int = _env_int(
+        "OSCILION_GATE_ROBUST_SPLIT_MS", 1767225600000  # 2026-01-01 UTC
+    )
 
     # --- señal vencida (FORWARD_REVIEW sesión/stale): si la vela de señal cerró
     # hace más de esto, NO se entra (el precio de referencia ya es viejo; pasa

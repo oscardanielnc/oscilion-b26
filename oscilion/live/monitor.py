@@ -256,7 +256,7 @@ class LiveMonitor:
         # filtro de RÉGIMEN DE MERCADO (auditoría 06-29): no operar a favor de la beta
         # cuando el mercado base va en contra del lado del trade (oro exento). Bloquea
         # las trampas alcistas que costaron −11R en vwap_anchor.
-        exempt = P.cluster_of(sym, a.strategy) == "gold"
+        exempt = P.regime_exempt(sym, a.strategy)
         regime_block = guards.market_regime_block(
             side, self._market_bull(), enabled=config.market_regime_filter, exempt=exempt)
         if regime_block is not None:
@@ -269,7 +269,9 @@ class LiveMonitor:
         # (n, exp_R del motor honesto) el trade se degrada a observe (sin capital).
         observe, gate_reason = guards.gate_decision(
             db.get_forward_backtest(sym, a.strategy), a.observe_only,
-            fw_stats=db.get_forward_result(sym, a.strategy, "forward"))
+            fw_stats=db.get_forward_result(sym, a.strategy, "forward"),
+            sub_windows=[db.get_forward_result(sym, a.strategy, "oos_a"),
+                         db.get_forward_result(sym, a.strategy, "oos_b")])
         if observe and not a.observe_only:
             db.log_event("WARN", "live.monitor",
                          f"{sym} {a.strategy}: degradado a observe — {gate_reason}")

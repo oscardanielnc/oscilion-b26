@@ -51,6 +51,17 @@ def cluster_of(sym: str, strategy: str) -> str:
     return CLUSTERS.get(key(sym, strategy), sym)
 
 
+def regime_exempt(sym: str, strategy: str) -> bool:
+    """True si el combo NO debe llevar el filtro de régimen de mercado (beta de BTC):
+    el oro (descorrelacionado, por SÍMBOLO) y las estrategias ANTI-BETA (break_retest,
+    que gana por shorts en alts que caen independientes de BTC). FUENTE ÚNICA — la usan
+    el monitor live, forward.refresh y research para no divergir (auditoría 06-29)."""
+    from config import config
+    return (sym in config.regime_exempt_symbols
+            or cluster_of(sym, strategy) == "gold"
+            or strategy in config.regime_exempt_strategies)
+
+
 @dataclass
 class Allocation:
     sym: str
