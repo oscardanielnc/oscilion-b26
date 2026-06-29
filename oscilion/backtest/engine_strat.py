@@ -18,6 +18,7 @@ import numpy as np
 from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS, CostModel
 from oscilion.data import store
+from oscilion.features import market_regime
 from oscilion.strategies import library as S
 from oscilion.strategies.context import build_ctx
 
@@ -42,6 +43,14 @@ class StratParams:
     time_stop_h: float = 0.0
     time_stop_keep_r: float = 1e9
     params: dict = field(default_factory=dict)
+    # filtros estructurales (auditoría 06-29) — replican el monitor en vivo para que
+    # forward_results (que lee el gate) refleje cómo se opera de verdad:
+    #   • cost_filter: rechaza entradas costo-tóxicas (costo round-trip > max_cost_r).
+    #   • regime_close_ts/regime_bull: si no vacíos, aplica el gate de régimen de
+    #     mercado (no LONG en bajista / SHORT en alcista). Vacío = sin filtro (oro).
+    cost_filter: bool = True
+    regime_close_ts: np.ndarray = field(default_factory=lambda: np.array([]))
+    regime_bull: np.ndarray = field(default_factory=lambda: np.array([], dtype=bool))
 
 
 @dataclass
@@ -100,6 +109,14 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         if cand is None:
             continue
 
+        # gate de RÉGIMEN DE MERCADO (= monitor live): no operar a favor de la beta
+        # cuando el benchmark va en contra del lado. Vacío = sin filtro (oro exento).
+        if p.regime_close_ts.size:
+            bull = market_regime.bull_at(p.regime_close_ts, p.regime_bull, T)
+            if bull is not None and ((cand["side"] == "long" and not bull)
+                                     or (cand["side"] == "short" and bull)):
+                continue
+
         # entrada: primera vela fina con open_ts >= T
         ei = int(np.searchsorted(ets, T, side="left"))
         if ei >= n_exit:
@@ -114,7 +131,11 @@ def run(bundle: CoinBundle, p: StratParams) -> list[dict]:
         if risk_dist <= 0:
             continue
         # piso de stop (= monitor): riesgo fijo / stop→0 dispara el notional
-        if risk_dist / entry_px < config.min_stop_pct:
+        stop_pct = risk_dist / entry_px
+        if stop_pct < config.min_stop_pct:
+            continue
+        # filtro de costo (= monitor): stop apretado ⇒ notional alto ⇒ fees devoran R
+        if p.cost_filter and p.costs.round_trip_cost_r(stop_pct) > config.max_cost_r:
             continue
         risk_amt = equity * p.risk
         notional = risk_amt / (risk_dist / entry_px)

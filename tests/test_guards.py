@@ -35,6 +35,40 @@ def test_gate_combo_validado_pasa():
     assert not obs and reason is None
 
 
+# ------------------- gate ADAPTATIVO: forward kill / graduación (06-29) -------------------
+_KW = dict(min_n=30, min_exp_r=0.0, fw_kill_n=15, fw_kill_exp_r=-0.10,
+           fw_grad_n=20, fw_grad_exp_r=0.10)
+
+
+def test_gate_forward_kill_corta_capital():
+    """Combo con capital (backtest OK) cuyo forward REAL ya sangra → observe."""
+    obs, reason = guards.gate_decision({"n": 100, "exp_r": 0.3}, False,
+                                       fw_stats={"n": 20, "exp_r": -0.2}, **_KW)
+    assert obs and "forward kill" in reason
+
+
+def test_gate_forward_kill_no_dispara_con_n_chico():
+    """Forward negativo pero muestra insuficiente → manda el backtest (capital)."""
+    obs, reason = guards.gate_decision({"n": 100, "exp_r": 0.3}, False,
+                                       fw_stats={"n": 5, "exp_r": -0.9}, **_KW)
+    assert not obs and reason is None
+
+
+def test_gate_graduacion_observe_a_capital():
+    """Observe cuyo forward REAL confirma edge con holgura → sube a capital."""
+    obs, reason = guards.gate_decision({"n": 100, "exp_r": 0.3}, True,
+                                       fw_stats={"n": 25, "exp_r": 0.2}, **_KW)
+    assert not obs and reason is None
+
+
+def test_gate_graduacion_no_dispara_con_forward_flojo():
+    obs, _ = guards.gate_decision({"n": 100, "exp_r": 0.3}, True,
+                                  fw_stats={"n": 25, "exp_r": 0.05}, **_KW)
+    assert obs                                    # exp_R < grad → sigue observe
+    obs2, _ = guards.gate_decision(None, True, fw_stats={"n": 5, "exp_r": 0.9}, **_KW)
+    assert obs2                                   # n < grad → sigue observe
+
+
 # ------------------------------ señal vencida ------------------------------
 def test_senal_fresca_pasa_y_vieja_no():
     now = 1_900_000_000_000

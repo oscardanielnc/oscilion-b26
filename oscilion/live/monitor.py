@@ -20,9 +20,8 @@ import numpy as np
 
 from config import config
 from oscilion.backtest.costs import DEFAULT_COSTS
-from oscilion.backtest.resample import resample_ohlcv
 from oscilion.data import fetch, store
-from oscilion.features import indicators as ind
+from oscilion.features import market_regime
 from oscilion.live import forward, guards
 from oscilion.notify import notify
 from oscilion.persistence import db
@@ -121,14 +120,8 @@ class LiveMonitor:
         self._mkt_bull = None
         try:
             bars = store.load_bars(config.market_benchmark, "1h")
-            if bars.empty or len(bars) < 60:
-                return None
-            tf = config.market_regime_tf_h
-            df = resample_ohlcv(bars, tf) if tf > 1 else bars
-            if len(df) < config.market_regime_ema + 2:
-                return None
-            ema = ind.ema(df["close"], config.market_regime_ema).to_numpy()
-            self._mkt_bull = bool(df["close"].to_numpy()[-1] > ema[-1])
+            self._mkt_bull = market_regime.latest_bull(
+                bars, config.market_regime_tf_h, config.market_regime_ema)
         except Exception:
             log.exception("market regime %s", config.market_benchmark)
         return self._mkt_bull
@@ -275,10 +268,14 @@ class LiveMonitor:
         # gate de validación (FORWARD_REVIEW #1): sin evidencia local suficiente
         # (n, exp_R del motor honesto) el trade se degrada a observe (sin capital).
         observe, gate_reason = guards.gate_decision(
-            db.get_forward_backtest(sym, a.strategy), a.observe_only)
+            db.get_forward_backtest(sym, a.strategy), a.observe_only,
+            fw_stats=db.get_forward_result(sym, a.strategy, "forward"))
         if observe and not a.observe_only:
             db.log_event("WARN", "live.monitor",
                          f"{sym} {a.strategy}: degradado a observe — {gate_reason}")
+        elif not observe and a.observe_only:
+            db.log_event("INFO", "live.monitor",
+                         f"{sym} {a.strategy}: GRADUADO a capital por forward — el edge real confirma")
 
         # guardas de cartera — solo aplican a trades CON capital (observe es stats-only)
         if not observe:
