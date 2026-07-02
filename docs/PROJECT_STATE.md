@@ -1,12 +1,58 @@
-# Estado del proyecto Oscilion — v0.8 (auditoría forward + gate adaptativo)
+# Estado del proyecto Oscilion — v0.9 (integridad de datos + gate sobre libro real + CONGELADO)
 
-**Actualizado:** 2026-06-29 (auditoría del forward en vivo 1ª semana + filtros de régimen/
-costo + gate adaptativo forward-aware). Lee también `AUDIT_2026-06-22.md`, `FORWARD_REVIEW.md`,
-`STRATEGY_MAP.md`. El bloque v0.7 (abajo) queda como histórico.
+**Actualizado:** 2026-07-02 (auditoría de muestra forward + 2 fixes de integridad). Lee
+también `AUDIT_2026-06-22.md`, `FORWARD_REVIEW.md`, `STRATEGY_MAP.md`. Los bloques v0.8/v0.7
+(abajo) quedan como histórico.
 
 ---
 
-## 🆕 v0.8 (2026-06-29) — auditoría del forward en vivo
+## 🆕 v0.9 (2026-07-02) — integridad de datos, gate sobre libro real, y CONGELAMIENTO
+
+> **Una línea:** con 44 trades cerrados (08-jun→02-jul) el veredicto de rentabilidad es
+> **estadísticamente NO concluyente** (capital: 34 trades, media −0.42R, IC95% [−0.94, +0.11])
+> y la muestra bajo reglas v0.8 son solo 3 trades → se arreglan 2 bugs de integridad, se
+> **CONGELA el motor** y se acumula muestra sin tocar nada hasta ~100 trades capital o
+> mediados de septiembre 2026, lo que llegue primero.
+
+**Auditoría de muestra (datos VM al 02-jul):**
+
+| Era | Trades capital | R total | R medio | Win% |
+|---|---|---|---|---|
+| pre-v0.7 (08–22 jun) | 20 | −14.4R | −0.72 | 15% |
+| v0.7 (22–29 jun) | 11 | −2.4R | −0.22 | 18% |
+| v0.8 (29 jun→) | 3 | +2.7R* | — | — |
+
+\* Ojo: el +4.78R de PAXG atribuido a v0.8 resultó ser un trade ABIERTO el 23-jun (v0.7) —
+lo destapó el bug #1. La media mejora era a era, pero nada es concluyente: para detectar un
+edge de +0.3R con sd≈1.55R hacen falta **~100 trades bajo reglas congeladas**.
+
+**Fixes (esta versión):**
+
+1. **`trades.ts` = APERTURA real** (`monitor._close` ahora pasa `ts=pos["entry_ts"]`; antes
+   caía al default = hora del cierre → todo análisis temporal/por-eras quedaba corrupto).
+   Las 44 filas históricas conservan el defecto (ts≈cierre); el análisis por eras de filas
+   viejas debe usar `exit_ts` con cautela.
+2. **El gate decide con el LIBRO REAL** (`db.real_forward_stats`: tabla `trades`,
+   capital+observe, desde `config.gate_real_fw_from_ms` = inicio de v0.8). Antes kill-switch
+   y graduación leían el scope `forward` = simulación del motor con reglas actuales, que
+   divergía de la mesa (XAU momentum: **+1.35R simulado vs −2.47R real**) porque simula
+   entradas que el monitor nunca tomó (vetos de cartera, downtime) y omite las que sí tomó.
+   El scope `forward` queda como diagnóstico de dashboard, no decide capital.
+
+**Candidato más sano hasta ahora** (único consistente backtest→OOS-2026→forward):
+HBAR break_retest (+0.24 bt n=46 / +0.30 oos26 / +0.75 fw n=6). Ninguno cumple aún la regla
+de graduación (n≥20 real).
+
+**🧊 CONGELAMIENTO:** desde este deploy NO se toca motor, gate, portfolio ni umbrales.
+Solo se vigila (dashboard/eventos) y se deja al gate auto-corregir (kill/graduación son
+automáticos). Revisión: **~100 trades capital o 2026-09-15**. El riesgo abierto #1
+(sizing 2%→~0.5% antes de capital real) sigue vigente y NO requiere tocar el motor ahora.
+
+Tests: **41/41**.
+
+---
+
+## 📦 v0.8 (2026-06-29) — auditoría del forward en vivo (histórico)
 
 > **Una línea:** la 1ª semana en vivo dio libro de capital **−16.85R / 16% win**. Disección:
 > (a) vwap_anchor (largo-only) sangró −11R comprando trampas alcistas en alts cayendo, SIN

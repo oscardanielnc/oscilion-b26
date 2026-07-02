@@ -267,9 +267,11 @@ class LiveMonitor:
 
         # gate de validación (FORWARD_REVIEW #1): sin evidencia local suficiente
         # (n, exp_R del motor honesto) el trade se degrada a observe (sin capital).
+        # fw_stats = LIBRO REAL de la era vigente (auditoría 07-02): el scope
+        # 'forward' simulado queda para el dashboard, no para decidir capital.
         observe, gate_reason = guards.gate_decision(
             db.get_forward_backtest(sym, a.strategy), a.observe_only,
-            fw_stats=db.get_forward_result(sym, a.strategy, "forward"),
+            fw_stats=db.real_forward_stats(sym, a.strategy),
             sub_windows=[db.get_forward_result(sym, a.strategy, "oos_a"),
                          db.get_forward_result(sym, a.strategy, "oos_b")])
         if observe and not a.observe_only:
@@ -402,7 +404,11 @@ class LiveMonitor:
                 "r_fee_exit": -exit_fee / risk_amt,
                 "r_funding": -fund / risk_amt,
             }
-        db.log_trade(sym, side, config.mode.value, entry=entry_px, stop=pos["init_stop"],
+        # ts = APERTURA (semántica del esquema). Sin esto, log_trade cae al default
+        # _now_ms() = hora del cierre → corrompe todo análisis temporal (auditoría
+        # 07-02: el PAXG "post-v0.8" resultó ser un trade abierto el 23-jun bajo v0.7).
+        db.log_trade(sym, side, config.mode.value, ts=pos["entry_ts"],
+                     entry=entry_px, stop=pos["init_stop"],
                      tp=pos["tp"], exit=exit_fill, exit_ts=exit_ts, status="closed", size=notional,
                      strategy=pos["strategy"], r_multiple=R, pnl=pnl,
                      fees=pos["entry_fee"] + exit_fee, funding=fund,

@@ -169,6 +169,14 @@ class Config:
     gate_fw_kill_exp_r: float = _env_float("OSCILION_GATE_FW_KILL_EXP_R", -0.10)
     gate_fw_grad_n: int = _env_int("OSCILION_GATE_FW_GRAD_N", 20)
     gate_fw_grad_exp_r: float = _env_float("OSCILION_GATE_FW_GRAD_EXP_R", 0.10)
+    # Auditoría 07-02: kill/graduación leen el LIBRO REAL (db.real_forward_stats),
+    # no la simulación del motor (scope 'forward', que divergía: XAU +1.35 simulado
+    # vs −2.47R real). Este corte acota la evidencia a la era de reglas VIGENTE
+    # (v0.8, 2026-06-29 23:48 UTC): pérdidas de eras anteriores (p.ej. vwap sin
+    # filtro de régimen) no deben matar un combo que hoy operaría distinto.
+    gate_real_fw_from_ms: int = _env_int(
+        "OSCILION_GATE_REAL_FW_FROM_MS", 1782776880000  # 2026-06-29 23:48 UTC (v0.8)
+    )
     # --- gate ROBUSTO recency-aware (auditoría 06-29): el backtest agregado deja
     # pasar un combo cuyo edge ya DECAYÓ (+0.30 viejo / −0.20 reciente: el promedio
     # engaña). Exige que la ventana OOS MÁS RECIENTE (2026-YTD) con muestra suficiente

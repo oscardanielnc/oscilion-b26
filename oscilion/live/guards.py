@@ -30,9 +30,10 @@ def gate_decision(bt_stats: dict | None, observe_only: bool,
     `bt_stats` = fila de forward_results scope='backtest' (motor honesto, OOS):
     evidencia local, no números de research que el histórico local quizá no
     respalda (el caso DOGE/vwap n=1 del primer ciclo).
-    `fw_stats` = scope='forward' (OOS post-inception, con filtros de régimen/costo):
-    el EDGE REAL reciente. Cierra el lazo que faltaba (auditoría 06-29: observe le
-    ganaba a capital porque el gate nunca miraba el forward).
+    `fw_stats` = LIBRO REAL (db.real_forward_stats: tabla trades, capital+observe,
+    era de reglas vigente). Cierra el lazo que faltaba (auditoría 06-29: observe le
+    ganaba a capital porque el gate nunca miraba el forward). Auditoría 07-02: antes
+    leía el scope 'forward' SIMULADO por el motor, que divergía del libro real.
 
     Prioridad: forward real (kill/graduación) MANDA sobre el backtest, porque mide
     cómo opera el combo HOY. Sin muestra forward suficiente, decide el backtest.

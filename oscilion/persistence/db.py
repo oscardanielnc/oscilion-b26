@@ -204,6 +204,39 @@ def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
     return get_forward_result(sym, strategy, "backtest")
 
 
+def real_forward_stats(sym: str, strategy: str, since_ms: int | None = None) -> Optional[dict]:
+    """Stats del LIBRO REAL (tabla trades, capital+observe) para el gate adaptativo.
+
+    Auditoría 07-02: el scope 'forward' de forward_results es una SIMULACIÓN del
+    motor con las reglas actuales sobre el histórico — puede divergir del libro
+    (XAU momentum: +1.35 simulado vs −2.47R real) porque simula entradas que el
+    monitor nunca tomó (vetos, límites de cartera, downtime) y omite las que sí.
+    Kill-switch y graduación deben decidir con lo que REALMENTE pasó en la mesa.
+
+    Incluye observe (es justo la evidencia de graduación; r_multiple es comparable).
+    `since_ms` acota a la era de reglas vigente (config.gate_real_fw_from_ms) para
+    no matar un combo por pérdidas de una era anterior del motor.
+    None si no hay trades cerrados (el gate cae al backtest) o ante fallo de BD.
+    """
+    from config import config
+    since = config.gate_real_fw_from_ms if since_ms is None else since_ms
+    try:
+        with _lock:
+            row = get_connection().execute(
+                "SELECT COUNT(*) n, AVG(r_multiple) exp_r, SUM(r_multiple) sum_r,"
+                " AVG(r_multiple > 0) win_rate FROM trades"
+                " WHERE sym=? AND strategy=? AND status='closed'"
+                " AND r_multiple IS NOT NULL AND ts >= ?",
+                (sym, strategy, since),
+            ).fetchone()
+        if not row or not row["n"]:
+            return None
+        return dict(row)
+    except Exception:
+        log.exception("Fallo real_forward_stats %s %s", sym, strategy)
+        return None
+
+
 def log_params(version: str, params: dict) -> Optional[int]:
     return _insert("params", dict(ts=_now_ms(), version=version,
                                   json_params=_jdump(params) or "{}"))
