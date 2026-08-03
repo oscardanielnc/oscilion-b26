@@ -1,8 +1,56 @@
-# Estado del proyecto Oscilion — v0.9 (integridad de datos + gate sobre libro real + CONGELADO)
+# Estado del proyecto Oscilion — v1.0 (CERRADO: no hay edge)
 
-**Actualizado:** 2026-07-02 (auditoría de muestra forward + 2 fixes de integridad). Lee
-también `AUDIT_2026-06-22.md`, `FORWARD_REVIEW.md`, `STRATEGY_MAP.md`. Los bloques v0.8/v0.7
-(abajo) quedan como histórico.
+**Actualizado:** 2026-08-03 (auditoría final de cierre). Documento rector:
+**`AUDIT_2026-08-03.md`**. Todo lo de abajo (v0.9 y anteriores) es **histórico**.
+
+---
+
+## 🏁 v1.0 (2026-08-03) — VEREDICTO GO/NO-GO: **NO HAY EDGE. PROYECTO CERRADO.**
+
+> **Una línea:** el forward completo (110 trades, 08-jun→02-ago, dry-run) dio **−64.2R con
+> 14.5% de win rate** en un mercado **lateral** (BTC +0.4% en 8 semanas) — es decir, en el
+> régimen que la tesis dice explotar; y la correlación backtest→forward por combo resultó
+> **cero/negativa** (Spearman −0.18), de modo que lo refutado no son las cinco estrategias
+> sino **el método que las seleccionó**.
+
+**Resultado:**
+
+| Métrica | Valor |
+|---|---|
+| R acumulado | −64.2R |
+| Win rate | 14.5% (breakeven 31.4%) |
+| Equity máx / MaxDD | +0.3R / −64.4R (monótona descendente) |
+| Peor racha | 18 perdedores seguidos |
+| P(esto \| expR real = 0) | < 1e−4 (Monte Carlo, 20k sims) |
+
+**Estrategias — todas descartadas:**
+
+| Estrategia | n | expR | p(expR≥0.10) | Veredicto |
+|---|---:|---:|---:|---|
+| `ema_trend_stack` | 16 | −1.077 | 1e−26 | descartada (0 ganadores de 16) |
+| `orb_breakout` | 24 | −0.639 | 5e−5 | descartada (ganador medio 0.72R: el RR≥2.5 no existe) |
+| `vwap_anchor` | 49 | −0.498 | 1e−3 | descartada |
+| `momentum_pullback` | 2 | −1.236 | 2e−3 | descartada |
+| `break_retest` | 19 | −0.248 | 0.23 | no concluyente → descartada por falta de método fiable |
+
+**Hallazgo central:** de 22 combos con expR positivo en OOS-2026, solo **2 (9%)** salieron
+positivos en forward, ambos con n≤4; los 22 juntos **−65.1R en 102 trades**. El pipeline
+doble-OOS + anti-beta + purged-WF + gate adaptativo **selecciona ruido**. Cualquier
+estrategia futura validada con este método repetirá el resultado.
+
+**Además:** con 0.54 trades/semana por combo y sd 1.25R, detectar un edge de +0.30R exigiría
+**4.9 años por combo** → la regla de v0.9 ("esperar ~100 trades capital") era matemáticamente
+inviable a esa granularidad. Costos honestos y menores (−7.5R de los −64R, 12%).
+
+**Acciones ejecutadas:** servicio `oscilion` y `oscilion-api` **detenidos y deshabilitados**
+en la VM el 2026-08-03; BD conservada como evidencia; **nunca se operó con capital real**.
+
+**Si algún día se retoma:** el prerequisito NO es una estrategia nueva, es **rehacer la
+validación** (nivel de familia y no de combo; menos parámetros libres; horizonte de trades
+muy superior por unidad de decisión).
+
+El invariante de honestidad de `VISION.md` —"el backtest puede decir *no hay edge*: se
+acepta"— se cumple aquí en su forma más fuerte: **lo dijo el forward, y se acepta.**
 
 ---
 
