@@ -1,6 +1,6 @@
 # --- Oscilion ---
-# Datos y artefactos (nunca al repo). ANCLADOS a la raíz con "/" para NO ignorar
-# paquetes fuente como oscilion/data/ (bug previo: "data/" los ocultaba).
+# Data and artifacts (never in the repo). ANCHORED to the root with "/" so source
+# packages such as oscilion/data/ are NOT ignored (earlier bug: "data/" hid them).
 /data/
 /logs/
 *.db
@@ -8,12 +8,12 @@
 *.db-shm
 *.parquet
 
-# Secretos / entorno
+# Secrets / environment
 .env
 *.env
 !example.env
 
-# Python (build dirs anclados a la raíz para no chocar con frontend/dist)
+# Python (build dirs anchored to the root so they do not clash with frontend/dist)
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -30,7 +30,7 @@ env/
 
 # Frontend
 frontend/node_modules/
-# frontend/dist SÍ se versiona: la VM sirve el build sin necesitar Node.
+# frontend/dist IS versioned: the VM serves the build without needing Node.
 
 # IDE / OS
 .idea/

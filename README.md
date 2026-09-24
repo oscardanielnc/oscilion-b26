@@ -35,11 +35,12 @@ and the SQLite database are not (they are gitignored and can be regenerated).
 The headline number from the early work is a Sharpe ratio that went from **-0.47 to +1.89**
 when turn confirmation was added to the reversion entry, on **1h candles over about 120
 days** of data (winrate 28% -> 40%, profit factor 0.87 -> 1.22; the default universe at
-the time was BTC, ETH and SOL). **That result was never
-confirmed.** It came from a single short window, it still failed the project's own
-go/no-go bar (PF 1.22 < 1.3), and the roadmap recorded it at the time as "promising, not
-confirmed, multi-year validation pending." It is reported here because it is the kind of
-number that makes a project look good, and it did not survive.
+the time was BTC, ETH and SOL).
+
+**That result was never confirmed.** It came from a single short window, it still failed
+the project's own go/no-go bar (PF 1.22 < 1.3), and the roadmap recorded it at the time as
+"promising, not confirmed, multi-year validation pending." It is reported here because it
+is the kind of number that makes a project look good, and it did not survive.
 
 What the multi-year validation and the forward test showed:
 
