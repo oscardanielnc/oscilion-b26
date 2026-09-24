@@ -1,142 +1,146 @@
-# Rescate del proyecto BTC/Sentinel — qué nos sirve
+# Rescuing the BTC/Sentinel project - what is useful to us
 
-> Revisión a fondo de `C:\Users\LENOVO\btc` (sistema `sentinel`, descartado tras
-> auditoría 2026-05-29). Objetivo: extraer datos, estrategias, aprendizajes y
-> tácticas reutilizables para Oscilion (observador multi-moneda que pronostica
-> dirección y dice cuándo entrar). Fecha de revisión: 2026-06-03.
+> A thorough review of an earlier local research project (`btc/`, the `sentinel` system,
+> discarded after its 2026-05-29 audit). Goal: extract data, strategies, lessons and
+> reusable tactics for Oscilion (a multi-coin observer that forecasts direction and says
+> when to enter). Review date: 2026-06-03.
 
 ---
 
-## 0. Conclusión de la revisión
+## 0. Review conclusion
 
-El proyecto BTC llegó **independientemente a las mismas conclusiones que Oscilion** —
-con otro código, otras estrategias y otra metodología. Eso eleva mucho la confianza:
+The BTC project **independently reached the same conclusions as Oscilion**, with different
+code, different strategies and a different methodology. That raises confidence a lot:
 
-| Hallazgo | Oscilion | BTC/Sentinel |
+| Finding | Oscilion | BTC/Sentinel |
 |---|---|---|
-| Reversión a la media | ❌ sin edge (PF 0.76, calibración invertida) | ❌ BB_REVERSION Sharpe −0.62/−0.73 |
-| Momentum / breakout / continuación | ✅ edge OOS (regime-condicional) | ✅ EMA_STACK, MOMENTUM_PULL, ORB, VWAP, BREAK_RETEST positivos OOS |
-| Edge bruto ~breakeven, **los costos deciden** | ✅ | ✅ (auditoría: #1 lever = ejecución maker) |
-| La **convicción/score NO predice** edge | ✅ (calibración invertida) | ✅ ("sizing-por-convicción es ruido") |
-| Gestión que recorta ganadores hace daño | (pendiente) | ✅ (hold-a-T2 > parcial+breakeven+trail) |
+| Mean reversion | no edge (PF 0.76, inverted calibration) | BB_REVERSION Sharpe -0.62/-0.73 |
+| Momentum / breakout / continuation | OOS edge (regime-conditional) | EMA_STACK, MOMENTUM_PULL, ORB, VWAP, BREAK_RETEST positive OOS |
+| Raw edge ~breakeven, **costs decide** | yes | yes (audit: #1 lever = maker execution) |
+| **Conviction/score does NOT predict** edge | yes (inverted calibration) | yes ("sizing by conviction is noise") |
+| Management that cuts winners hurts | (pending) | yes (hold-to-T2 > partial + breakeven + trail) |
 
-**Hay mucho que rescatar**: 5+ años de datos, una biblioteca de estrategias con
-resultados, y decenas de aprendizajes ya pagados con trabajo. **El gran asterisco:**
-los backtests positivos de las estrategias salieron del harness propio de sentinel,
-que la auditoría encontró **optimista** en otras tácticas (vpoc/mttc/srb dieron
-−0.127R al medirlos con motor honesto). ⇒ **hay que re-validar esas estrategias con
-el motor honesto de Oscilion** antes de creerles.
+**There is a lot to rescue**: 5+ years of data, a library of strategies with results, and
+dozens of lessons already paid for with work. **The big asterisk:** the strategies'
+positive backtests came from sentinel's own harness, which its audit found to be
+**optimistic** on other tactics (vpoc/mttc/srb gave -0.127R when measured with an honest
+engine). => **those strategies must be re-validated with Oscilion's honest engine** before
+believing them.
 
 ---
 
-## 1. Datos reutilizables (alto valor, listos)
+## 1. Reusable data (high value, ready)
 
-`C:\Users\LENOVO\btc\backtest\data\`
+`btc/backtest/data/`
 
-| Dataset | Cobertura | Uso |
+| Dataset | Coverage | Use |
 |---|---|---|
-| `futures_um/BTCUSDT_1m.parquet` (120 MB) | 2021–2026, 1 minuto | **Oro**: salidas intrabar honestas (SL antes que TP) |
-| `futures_um/BTCUSDT_{5m,15m,1h,4h}.parquet` | 2021–2026 | señales multi-TF |
-| `futures_um/BTCUSDT_funding.parquet` | histórico | costo de funding real |
-| `{14 alts}_1h_730.csv` + `_15m.csv` | 730 días | aave, ada, apt, avax, bnb, doge, dot, eth, inj, link, sol, sui, xrp |
+| `futures_um/BTCUSDT_1m.parquet` (120 MB) | 2021-2026, 1 minute | **Gold**: honest intrabar exits (SL before TP) |
+| `futures_um/BTCUSDT_{5m,15m,1h,4h}.parquet` | 2021-2026 | multi-TF signals |
+| `futures_um/BTCUSDT_funding.parquet` | history | real funding cost |
+| `{14 alts}_1h_730.csv` + `_15m.csv` | 730 days | aave, ada, apt, avax, bnb, doge, dot, eth, inj, link, sol, sui, xrp |
 
-→ Oscilion ya descarga su propio histórico vía ccxt; estos datos sirven como
-**fuente cruzada / verificación** y para el motor de salida 1m (que Oscilion aún no tiene).
+-> Oscilion already downloads its own history via ccxt; this data serves as a **cross
+source / verification** and for the 1m exit engine (which Oscilion does not have yet).
 
 ---
 
-## 2. Estrategias documentadas (la joya) — TRAIN/TEST 2023–2026
+## 2. Documented strategies (the jewel) - TRAIN/TEST 2023-2026
 
-Resultados del harness de sentinel (a re-validar honesto). Ordenadas por interés:
+Results from sentinel's harness (to be re-validated honestly). Sorted by interest:
 
-| Estrategia | Tipo | TEST Sharpe | TEST avg R / WR | Dirección | Nota |
+| Strategy | Type | TEST Sharpe | TEST avg R / WR | Direction | Note |
 |---|---|---:|---|---|---|
-| **EMA_TREND_STACK** | tendencia | **1.41** | +0.68R / 60% | LONG-only | stack 9>21>50 4H + pullback a EMA21 |
-| **MOMENTUM_PULLBACK** | continuación | **1.01** | +0.14R / 54% | LONG-only | impulso 2H + pullback 10–80%, TP=2R |
-| **VWAP_ANCHOR** | tendencia | 0.92 | +0.22R / 40% | LONG-only | precio>VWAP 1H y 4H, TP=2.5R |
-| **BREAK_RETEST** | continuación | 0.85 | +0.85R / 50% | long+short | ruptura **silenciosa** (bajo vol) + retest, n pequeño |
-| **ORB_BREAKOUT** | breakout | 0.83 | +0.26R / 47% | long+short | rompe rango 6H estrecho, sesión EU/NY |
-| BB_REVERSION | reversión | −0.62 | / 34% | — | ❌ pierde salvo régimen lateral raro |
+| **EMA_TREND_STACK** | trend | **1.41** | +0.68R / 60% | LONG-only | 9>21>50 4H stack + pullback to EMA21 |
+| **MOMENTUM_PULLBACK** | continuation | **1.01** | +0.14R / 54% | LONG-only | 2H impulse + 10-80% pullback, TP=2R |
+| **VWAP_ANCHOR** | trend | 0.92 | +0.22R / 40% | LONG-only | price > 1H and 4H VWAP, TP=2.5R |
+| **BREAK_RETEST** | continuation | 0.85 | +0.85R / 50% | long+short | **stealth** breakout (low vol) + retest, small n |
+| **ORB_BREAKOUT** | breakout | 0.83 | +0.26R / 47% | long+short | breaks a narrow 6H range, EU/NY session |
+| BB_REVERSION | reversion | -0.62 | / 34% | - | loses except in a rare sideways regime |
 
-**Lectura:** las 5 primeras son **momentum/tendencia/continuación** → alinean con el
-pivot de Oscilion. La única **contraria** (BB_REVERSION) pierde, igual que la reversión
-de Oscilion. Código fuente en `btc/sentinel/strategies/*.py`.
-
----
-
-## 3. Aprendizajes transferibles (tácticas pagadas con trabajo)
-
-1. **Entrar FRESCO, antes de que la multitud confirme.** Gate repetido y validado en
-   varias estrategias: si EMA9/21 1H **ya** está alineado → entrada tardía, R:R peor.
-   (`O1_gate` / `C3 invertido`). Es un edge real de *timing*. ⇒ probar en Oscilion.
-2. **Muchos indicadores estándar son "null filters"** (RSI, MACD): ~igual activación en
-   ganadores y perdedores. No confiar sin medir poder discriminante.
-3. **Costos deciden.** Edge bruto ~breakeven; ejecución **maker** es la palanca #1 (igual
-   que Oscilion). El diseño de entrada límite/retest baja el drag.
-4. **Convicción ≠ edge.** Dimensionar por "convicción" fue ruido. (= calibración invertida).
-5. **Régimen-dependencia:** breakout/momentum brillan en volátil/rango-luego-ruptura;
-   se aplanan en tendencia suave. Reversión solo sirve en lateral. (= Oscilion).
-6. **Exits por estrategia:** MOMENTUM_PULL mejora mucho con TP=2R; ORB empeora con TP
-   (deja correr ganadores). No hay exit único — depende de la táctica.
-7. **Sesgo direccional:** BTC LONG-only (sesgo alcista estructural; SHORT destruyó capital
-   en estrategias de tendencia). ORB sí usa SHORT (ruptura de rango en volátil).
-   ⇒ la dirección óptima es **condicional al activo/régimen** (clave para "pronosticar dirección").
-8. **Sesión:** Europa/NY rinden; Asia genera whipsaws. Ventanas tóxicas: 22–23 UTC,
-   cierre CME viernes, ±1h de news macro (CPI/FOMC/NFP).
-9. **Gestión:** recortar ganadores (parcial@T1 + breakeven + trail) restó; hold-a-T2 sumó.
-10. **Patrones (señales contextuales)** con condiciones documentadas (índice + skip_when):
-    FUND_EXT (primer spike, RSI neutro), LIQ_SWEEP (requiere 4H alineado), SESSION_BREAK
-    (ruptura Asia contra-tendencia 75%), ROUND_MAG, CME_GAP. Edge débil/contextual — útiles
-    como **filtros/boost**, no como señal primaria.
-
-### Ya rechazado con evidencia (NO re-investigar a ciegas)
-GARCH/ATR sizing (OOS 0.025) · OU/VA-return (sin edge) · Kelly (N insuficiente) ·
-OB-imbalance standalone (sin edge) · liq-stream CVD proxy (OOS 0.21) · sizing-por-convicción.
-HMM 5-estados: sofisticado pero **no creó edge** por sí solo (sistema siguió negativo).
+**Reading:** the first 5 are **momentum/trend/continuation** -> aligned with Oscilion's
+pivot. The only **contrarian** one (BB_REVERSION) loses, just like Oscilion's reversion.
+Source code in `btc/sentinel/strategies/*.py`.
 
 ---
 
-## 4. Metodología que vale la pena heredar
-- **Métrica primaria = expectativa por trade (R)**, no % compuesto.
-- **Pipeline:** aislar → backtest OOS ≥0.70 → backtest conjunto → producción.
-- **Motor de salida 1m pesimista** (SL antes que TP en el mismo minuto) + costos reales.
-  Oscilion hoy resuelve intrabar con la vela base; el 1m de BTC permitiría subir el realismo.
+## 3. Transferable lessons (tactics paid for with work)
+
+1. **Enter FRESH, before the crowd confirms.** A gate repeated and validated across
+   several strategies: if the 1H EMA9/21 is **already** aligned -> late entry, worse R:R.
+   (`O1_gate` / inverted `C3`). It is a real *timing* edge. => test it in Oscilion.
+2. **Many standard indicators are "null filters"** (RSI, MACD): about the same activation
+   on winners and losers. Do not trust them without measuring discriminating power.
+3. **Costs decide.** Raw edge ~breakeven; **maker** execution is the #1 lever (same as
+   Oscilion). A limit/retest entry design lowers the drag.
+4. **Conviction != edge.** Sizing by "conviction" was noise (= inverted calibration).
+5. **Regime dependence:** breakout/momentum shine in volatile / range-then-breakout
+   markets; they flatten in smooth trends. Reversion only works sideways (= Oscilion).
+6. **Exits per strategy:** MOMENTUM_PULL improves a lot with TP=2R; ORB gets worse with a
+   TP (let winners run). There is no single exit; it depends on the tactic.
+7. **Directional bias:** BTC LONG-only (structural bullish bias; SHORT destroyed capital in
+   trend strategies). ORB does use SHORT (range breakout in volatile markets).
+   => the optimal direction is **conditional on the asset/regime** (key to "forecasting
+   direction").
+8. **Session:** Europe/NY pay off; Asia generates whipsaws. Toxic windows: 22-23 UTC,
+   the Friday CME close, +/-1h around macro news (CPI/FOMC/NFP).
+9. **Management:** cutting winners (partial @ T1 + breakeven + trail) subtracted;
+   hold-to-T2 added.
+10. **Patterns (contextual signals)** with documented conditions (index + skip_when):
+    FUND_EXT (first spike, neutral RSI), LIQ_SWEEP (needs an aligned 4H), SESSION_BREAK
+    (counter-trend Asia breakout 75%), ROUND_MAG, CME_GAP. Weak/contextual edge: useful as
+    **filters/boosts**, not as a primary signal.
+
+### Already rejected with evidence (do NOT re-investigate blindly)
+GARCH/ATR sizing (OOS 0.025), OU/VA-return (no edge), Kelly (insufficient N), standalone
+OB imbalance (no edge), liq-stream CVD proxy (OOS 0.21), sizing by conviction.
+5-state HMM: sophisticated but it **did not create edge** by itself (the system stayed
+negative).
 
 ---
 
-## 5. Qué rescatar vs. descartar
+## 4. Methodology worth inheriting
+- **Primary metric = expectancy per trade (R)**, not compounded %.
+- **Pipeline:** isolate -> OOS backtest >= 0.70 -> joint backtest -> production.
+- **Pessimistic 1m exit engine** (SL before TP within the same minute) + real costs.
+  Oscilion today resolves intrabar with the base candle; BTC's 1m data would raise realism.
 
-| Rescatar ✅ | Descartar / archivar 🗄️ |
+---
+
+## 5. What to rescue vs discard
+
+| Rescue | Discard / archive |
 |---|---|
-| Datos 1m/funding BTC + 14 alts | El stack de producción de sentinel (HMM, torneo, OI, Kalman) — complejo y sin edge neto |
-| Lógica de las 5 estrategias momentum/tendencia | BB_REVERSION (contraria, pierde) |
-| Aprendizajes 1–10 (esp. gate de frescura, costos, exits) | Patrones de edge débil como señal primaria |
-| Metodología (R, OOS≥0.7, motor 1m pesimista) | Conclusiones del harness optimista sin re-validar |
+| BTC 1m/funding data + 14 alts | sentinel's production stack (HMM, tournament, OI, Kalman): complex and no net edge |
+| The logic of the 5 momentum/trend strategies | BB_REVERSION (contrarian, loses) |
+| Lessons 1-10 (esp. freshness gate, costs, exits) | Weak-edge patterns as a primary signal |
+| Methodology (R, OOS >= 0.7, pessimistic 1m engine) | Conclusions from the optimistic harness without re-validation |
 
 ---
 
-## 6. Hipótesis a validar (honestamente, en Oscilion)
+## 6. Hypotheses to validate (honestly, in Oscilion)
 
-| # | Hipótesis | Test |
+| # | Hypothesis | Test |
 |---|---|---|
-| H1 | Las estrategias momentum/tendencia mantienen expectativa **positiva con motor honesto** (costos reales, salida 1m pesimista) en 12 monedas | portar a `breakout_candidate`-style + engine honesto, OOS |
-| H2 | El **gate de frescura** (entrar antes de que EMA 1H confirme) añade edge **genérico** (no solo BTC) | A/B con y sin gate, por moneda |
-| H3 | **Ejecución maker** convierte edges finos en sólidos | modelar fills límite (no-fill / adverse selection) |
-| H4 | La **dirección óptima** es condicional (LONG-only por sesgo, o regime-dependiente) | medir long vs short por moneda/régimen |
-| H5 | El **exit óptimo** depende de la táctica (TP 2R vs trailing vs hold) | grid de exits por estrategia |
-| H6 | Combinar **supervivientes poco correlacionados** sube el Sharpe de cartera | portfolio multi-moneda |
-| H7 | **Filtro de régimen** (range/trend de Oscilion) mejora cada estrategia | condicionar por régimen |
-| H8 | **Filtro de sesión** (EU/NY) generaliza más allá de BTC | A/B por sesión |
+| H1 | The momentum/trend strategies keep a **positive expectancy under an honest engine** (real costs, pessimistic 1m exit) on 12 coins | port to a `breakout_candidate`-style + honest engine, OOS |
+| H2 | The **freshness gate** (enter before the 1H EMA confirms) adds a **generic** edge (not just BTC) | A/B with and without the gate, per coin |
+| H3 | **Maker execution** turns thin edges into solid ones | model limit fills (no-fill / adverse selection) |
+| H4 | The **optimal direction** is conditional (LONG-only by bias, or regime-dependent) | measure long vs short per coin/regime |
+| H5 | The **optimal exit** depends on the tactic (2R TP vs trailing vs hold) | exit grid per strategy |
+| H6 | Combining **weakly correlated survivors** raises the portfolio Sharpe | multi-coin portfolio |
+| H7 | A **regime filter** (Oscilion's range/trend) improves each strategy | condition on regime |
+| H8 | The **session filter** (EU/NY) generalizes beyond BTC | A/B per session |
 
 ---
 
-## 7. Foco (no perderlo)
+## 7. Focus (do not lose it)
 
-Oscilion = **observador constante multi-moneda** que pronostica dirección (↑/↓) y dice
-**exactamente cuándo entrar**, con la mayor convicción posible y **sabiendo salir a tiempo**
-(aunque no llegue al +5%; lo importante es acertar la dirección y gestionar el riesgo).
-El rescate del proyecto BTC sirve a ese foco: aporta **estrategias direccionales validadas
-en una dirección** (momentum/continuación) y aprendizajes de ejecución/timing — justo lo
-que convierte "tenemos un edge fino" en "sabemos cuándo y cómo entrar".
+Oscilion = a **constant multi-coin observer** that forecasts direction (up/down) and says
+**exactly when to enter**, with the highest possible conviction and **knowing when to exit
+in time** (even if it does not reach +5%; what matters is getting the direction right and
+managing risk). Rescuing the BTC project serves that focus: it brings **directional
+strategies validated in one direction** (momentum/continuation) and execution/timing
+lessons, exactly what turns "we have a thin edge" into "we know when and how to enter".
 
-> El plan de pruebas multi-sesión está en `docs/ROADMAP.md` (sección "Fase de pruebas — rescate BTC").
+> The multi-session test plan is in `docs/ROADMAP.md` (section "Testing phase - rescuing
+> the BTC/Sentinel project").

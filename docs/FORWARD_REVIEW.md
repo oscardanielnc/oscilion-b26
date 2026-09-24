@@ -1,118 +1,140 @@
-# Forward Review — primer ciclo real (paper)
+# Forward review - first real cycle (paper)
 
-> Bitácora de revisiones del forward en vivo (dry-run) y puntos abiertos a resolver.
-> Última revisión: **2026-06-12** (datos 10–12 jun).
+> Log of the live forward (dry-run) reviews and the open points to resolve.
+> Last review: **2026-06-12** (data from 10-12 June). Times in UTC-5.
 
-## 📌 Estado al 2026-06-12 (deploy CONFIRMADO en vivo)
+## Status as of 2026-06-12 (deployment CONFIRMED live)
 
-- **Infraestructura:** sana. `errors: []` en toda la ventana; cierres con `cost_audit`
-  poblado (schema v6 desplegado y funcionando), stops salen a −1.04R **exactos** según
-  modelo → no hay coste oculto, el slippage de salida ya estaba modelado (confirmado con datos).
-- **2 trades cerrados en la ventana**, ambos **PRE-GATE**:
+- **Infrastructure:** healthy. `errors: []` across the whole window; closes with
+  `cost_audit` populated (schema v6 deployed and working), stops exit at **exactly**
+  -1.04R per the model -> no hidden cost, exit slippage was already modeled (confirmed
+  with data).
+- **2 trades closed in the window**, both **PRE-GATE**:
 
-| # | Símbolo | Estrategia | Lado | R | Entrada (Lima) | Cierre |
+| # | Symbol | Strategy | Side | R | Entry | Close |
 |---|---|---|---|---|---|---|
-| 1 | DOGE | vwap_anchor | long | −1.04 | 10-jun 09:00 | stop |
-| 2 | ETH  | vwap_anchor | long | −1.04 | 10-jun 09:00 | stop |
+| 1 | DOGE | vwap_anchor | long | -1.04 | 10-Jun 09:00 | stop |
+| 2 | ETH  | vwap_anchor | long | -1.04 | 10-Jun 09:00 | stop |
 
-  > Las entradas (09:00) son **anteriores** a los commits del gate (`2980f85` 09:22,
-  > `119792b` 10:17 de ese mismo día). No cuentan como evidencia gateada. El gate actual
-  > **habría vetado DOGE** (backtest local exp_R −0.077). Son herencia del proceso viejo.
+  > The entries (09:00) are **earlier** than the gate commits (`10c1c8e` 09:22,
+  > `033e52c` 10:17 the same day). They do not count as gated evidence. The current gate
+  > **would have vetoed DOGE** (local backtest exp_R -0.077). They are leftovers of the
+  > old process.
 
-- **1 entrada POST-GATE (legítima):** AVAX/vwap_anchor long (12-jun 12:00), backtest local
-  n=188 / exp_R +0.135 → pasa el gate correctamente. **Sigue abierta** (sin cierre aún).
-- **Resto de series en ESPERANDO**: el gate filtra, no duerme.
+- **1 POST-GATE (legitimate) entry:** AVAX/vwap_anchor long (12-Jun 12:00), local
+  backtest n=188 / exp_R +0.135 -> it correctly passes the gate. **Still open** (not
+  closed yet).
+- **The rest of the series are WAITING**: the gate filters, it does not sleep.
 
-### Acumulado forward (todo el periodo, 06-08 → 06-12)
-**7 trades cerrados · 1 ganado (TRX ORB +0.22) · ≈ −6.2R · TODOS pre-gate.**
-La muestra gateada "limpia" es hoy **1 trade abierto** → estadísticamente cero info.
-**Los −6.2R no refutan el edge**: son fuga de proceso ya corregida, no señal de mercado.
+### Cumulative forward (whole period, 06-08 -> 06-12)
+**7 closed trades, 1 winner (TRX ORB +0.22), ~ -6.2R, ALL pre-gate.**
+The "clean" gated sample today is **1 open trade** -> statistically zero information.
+**The -6.2R does not refute the edge**: it is a process leak that was already fixed, not
+a market signal.
 
-### Observaciones a vigilar
-- ⚠️ **`vwap_anchor` va 0/5 en forward** (la pata más débil del backtest). El gate ya corta
-  DOGE (−0.077) y XRP (−0.114), pero **ETH pasa con exp_R +0.022** → ruido, no edge.
-  **Propuesta:** subir `OSCILION_GATE_MIN_EXP_R` de 0.0 a **+0.05/+0.10** (≈ coste ida+vuelta)
-  para que solo opere lo que paga sus comisiones con margen. (1 línea / env var, sin código.)
-- 🐢 **Ritmo ~0.5 trades/día post-gate → 50 gateados ≈ 3 meses.** Si es muy lento, la palanca
-  segura es **ampliar universo dentro de combos ya validados** (más símbolos con n≥30 local),
-  nunca aflojar el gate.
-- ✅ Objetivo del sprint anterior (que el proceso deje de regalar R) **cumplido y verificado
-  en producción**.
+### Observations to watch
+- **`vwap_anchor` is 0/5 in forward** (the weakest leg of the backtest). The gate already
+  cuts DOGE (-0.077) and XRP (-0.114), but **ETH passes with exp_R +0.022** -> noise, not
+  edge. **Proposal:** raise `OSCILION_GATE_MIN_EXP_R` from 0.0 to **+0.05/+0.10** (~ the
+  round-trip cost) so only what pays its fees with margin trades. (1 line / env var, no
+  code.)
+- **Pace ~0.5 trades/day post-gate -> 50 gated trades ~ 3 months.** If that is too slow,
+  the safe lever is **widening the universe within already validated combos** (more
+  symbols with local n >= 30), never loosening the gate.
+- The goal of the previous sprint (that the process stops giving away R) is **met and
+  verified in production**.
 
-## 📌 Estado al 2026-06-10
+## Status as of 2026-06-10
 
-- **Infraestructura:** sana. `errors: []`, reinicios OK, logging de cierre de trades **ya funciona** (`trades` + `trade_summary` poblados; antes faltaba).
-- **Primer ciclo cerrado:** 5 trades.
+- **Infrastructure:** healthy. `errors: []`, restarts OK, trade close logging **now
+  works** (`trades` + `trade_summary` populated; it was missing before).
+- **First cycle closed:** 5 trades.
 
-| # | Símbolo | Estrategia | Lado | R | PnL | Cierre |
+| # | Symbol | Strategy | Side | R | PnL | Close |
 |---|---|---|---|---|---|---|
 | 1 | TRX | orb_breakout | short | +0.25 | +$50 | timeout |
-| 2 | TRX | vwap_anchor | long | −1.13 | −$226 | stop |
-| 3 | TRX | break_retest | long | −1.10 | −$220 | stop |
-| 4 | DOGE | vwap_anchor | long | −1.04 | −$208 | stop |
-| 5 | DOGE | vwap_anchor | long | −1.04 | −$209 | stop |
+| 2 | TRX | vwap_anchor | long | -1.13 | -$226 | stop |
+| 3 | TRX | break_retest | long | -1.10 | -$220 | stop |
+| 4 | DOGE | vwap_anchor | long | -1.04 | -$208 | stop |
+| 5 | DOGE | vwap_anchor | long | -1.04 | -$209 | stop |
 
-**Neto: −4.07R · −$814 · win-rate 20% (1/5).** Paper, no capital real. n diminuto → no concluyente, pero la señal va en dirección incómoda.
+**Net: -4.07R, -$814, win rate 20% (1/5).** Paper, no real capital. Tiny n -> not
+conclusive, but the signal points in an uncomfortable direction.
 
-## 🔴 Hallazgos
+## Findings
 
-1. **Cero TPs alcanzados.** 4/5 a stop completo; el único verde fue timeout (+0.25R), no objetivo. La tesis *let winners run* no se materializó ni una vez. Patrón peligroso: cortar verde chico, perder full en rojo.
-2. **Stops realizan peor que −1R** (−1.04 a −1.13R). Buffer anti-barridas + ejecución taker cuesta 4–13% extra sobre el 1R planeado. Sospecha: el backtest honesto puede NO modelar este slippage de salida → edge teórico inflado.
-3. **`vwap_anchor` es el sangrador** (3 trades, 0% WR, −1.07R). Y **DOGE/vwap_anchor entró 2× en vivo con backtest n=1** (exp_R −3.46, sin validación). Re-entró el mismo setup perdedor. Fuga de proceso.
-4. **Concentración correlacionada:** TRX tomó vwap LONG + break_retest LONG a la vez, misma dirección → 2× tamaño en la misma apuesta; ambas stopearon casi simultáneas. (La vez anterior, 06–08 jun, fue al revés: SHORT + LONG simultáneos en TRX casi al mismo precio → exposición neta ≈ 0 pagando doble coste.)
+1. **Zero TPs reached.** 4/5 at a full stop; the only green one was a timeout (+0.25R),
+   not the target. The *let winners run* thesis did not materialize once. A dangerous
+   pattern: cut small green, lose full red.
+2. **Stops realize worse than -1R** (-1.04 to -1.13R). The anti-sweep buffer + taker
+   execution costs 4-13% on top of the planned 1R. Suspicion: the honest backtest may NOT
+   model this exit slippage -> inflated theoretical edge.
+3. **`vwap_anchor` is the bleeder** (3 trades, 0% WR, -1.07R). And **DOGE/vwap_anchor
+   entered twice live with a backtest n=1** (exp_R -3.46, no validation). It re-entered
+   the same losing setup. A process leak.
+4. **Correlated concentration:** TRX took vwap LONG + break_retest LONG at the same time,
+   same direction -> 2x size on the same bet; both stopped out almost simultaneously.
+   (The time before, 06-08 June, was the reverse: SHORT + LONG at the same time on TRX at
+   almost the same price -> net exposure ~ 0 while paying double cost.)
 
-### Backtest vs forward (señal temprana = roja, n minúsculo)
+### Backtest vs forward (early signal = red, tiny n)
 | Combo | Backtest exp_R | Forward exp_R |
 |---|---|---|
-| TRX break_retest | +1.23 | −1.10 (n=1) |
-| TRX vwap_anchor | +0.22 | −1.13 (n=1) |
-| TRX orb_breakout | +0.18 | +0.22 (n=1) ✅ |
-| DOGE vwap_anchor | −3.46 (n=1) | −0.82 (n=2) |
+| TRX break_retest | +1.23 | -1.10 (n=1) |
+| TRX vwap_anchor | +0.22 | -1.13 (n=1) |
+| TRX orb_breakout | +0.18 | +0.22 (n=1) |
+| DOGE vwap_anchor | -3.46 (n=1) | -0.82 (n=2) |
 
-## ✅ Puntos resueltos (2026-06-10, diseño + implementación)
+## Resolved points (2026-06-10, design + implementation)
 
-1. **Gate de universo por validación** → `live/guards.gate_decision` + `db.get_forward_backtest`.
-   Diseño elegido: el gate lee el **backtest LOCAL** (`forward_results` scope=backtest, motor
-   honesto sobre los datos de ESTA máquina), no números de research: el caso DOGE/vwap fue
-   exactamente "research dice n=36, la VM solo tiene n=1". Umbrales: `n ≥ 30` **y** `exp_R > 0`
-   (`OSCILION_GATE_MIN_N` / `OSCILION_GATE_MIN_EXP_R`). Si no pasa → el trade se **degrada a
-   observe** (virtual sin capital, `trades.observe=1`, excluido del PnL): sigue acumulando
-   stats para poder graduarse, pero no sangra. Auto-corrige al crecer el histórico.
-2. **Veto cruzado por símbolo** → `guards.capital_position_on_symbol`: máx **1 posición CON
-   capital por símbolo** (cualquier estrategia y dirección). Observe no bloquea ni es bloqueado
-   (no lleva capital). Netting de cartera descartado por sobreingeniería con 9 monedas.
-3. **Auditoría de slippage de salida** → hallazgo: monitor y backtest usan el MISMO
-   `CostModel.realized` ⇒ el −1.04/−1.13R **sí está modelado** (es slippage 2bps + fees +
-   funding, no un coste oculto). Para verificarlo con datos cada cierre persiste
-   `trades.cost_audit` (JSON): R descompuesto en `r_gross` (precio puro), `r_slip_exit`,
-   `r_fee_entry/exit`, `r_funding` — visible en `/trades` y en el export diario. Si el día
-   que haya fills reales el slippage observado supera el modelado, se recalibra `costs.py`.
-4. **`tp = 1e+18`** → eliminado. Runner = `tp None` en estrategias/posición/BD/alertas
-   ("tp runner"); internamente `tp_barrier()` usa ±inf que jamás dispara ni contamina sizing.
+1. **Universe gate by validation** -> `live/guards.gate_decision` +
+   `db.get_forward_backtest`. Chosen design: the gate reads the **LOCAL backtest**
+   (`forward_results` scope=backtest, the honest engine over THIS machine's data), not
+   research numbers: the DOGE/vwap case was exactly "research says n=36, the VM only has
+   n=1". Thresholds: `n >= 30` **and** `exp_R > 0` (`OSCILION_GATE_MIN_N` /
+   `OSCILION_GATE_MIN_EXP_R`). If it does not pass -> the trade is **demoted to observe**
+   (virtual, no capital, `trades.observe=1`, excluded from PnL): it keeps accumulating
+   stats so it can graduate, but it does not bleed. It self-corrects as history grows.
+2. **Cross veto per symbol** -> `guards.capital_position_on_symbol`: max **1 position WITH
+   capital per symbol** (any strategy and direction). Observe does not block nor get
+   blocked (no capital). Portfolio netting was discarded as over-engineering with 9 coins.
+3. **Exit slippage audit** -> finding: monitor and backtest use the SAME
+   `CostModel.realized` => the -1.04/-1.13R **is modeled** (it is 2bps slippage + fees +
+   funding, not a hidden cost). To verify it with data, every close persists
+   `trades.cost_audit` (JSON): R broken down into `r_gross` (pure price), `r_slip_exit`,
+   `r_fee_entry/exit`, `r_funding`, visible in `/trades` and in the daily export. If, once
+   there are real fills, observed slippage exceeds the modeled one, `costs.py` is
+   recalibrated.
+4. **`tp = 1e+18`** -> removed. Runner = `tp None` in strategies/position/DB/alerts ("tp
+   runner"); internally `tp_barrier()` uses +/-inf, which never fires nor pollutes sizing.
 
-   Extras del mismo cambio: **piso de stop** `min_stop_pct` 0.2% (riesgo fijo / stop→0
-   disparaba el notional; aplicado idéntico en monitor y engine) y **guard de señal vencida**
-   `max_signal_age_min` 30m (tras downtime/refresh fallido no se entra a precio viejo — causa
-   probable del ORB fuera de sesión: el filtro evalúa la hora de la VELA, no la actual).
+   Extras from the same change: a **stop floor** `min_stop_pct` 0.2% (fixed risk /
+   stop->0 blew up the notional; applied identically in monitor and engine) and a **stale
+   signal guard** `max_signal_age_min` 30m (after downtime or a failed refresh it does not
+   enter at an old price; the likely cause of the out-of-session ORB: the filter evaluates
+   the CANDLE's time, not the current time).
 
-5. **Bloque A (misma sesión, segunda tanda):** los **límites de Fase B por fin se aplican
-   en vivo** (máx 3 posiciones con capital, máx 2 por clúster — el portfolio se validó con
-   ese esquema pero el monitor no lo enforceaba: podían abrirse 7×2% = 14% simultáneo en un
-   clúster ~0.7 correlacionado); **freno diario real** (`max_daily_loss` 6% estaba en config
-   y nunca se chequeaba → ahora PnL cerrado del día UTC ≤ −6% bloquea nuevas entradas con
-   capital + ntfy CRITICAL); **timeout ccxt explícito** (10s, `OSCILION_CCXT_TIMEOUT_MS`) +
-   WARN de tick lento; y el estado del monitor **solo se persiste tras step exitoso** (antes
-   un `finally` guardaba estado posiblemente corrupto que un restart rehidrataba).
+5. **Block A (same session, second batch):** the **phase B limits are finally enforced
+   live** (max 3 capital positions, max 2 per cluster; the portfolio was validated with
+   that scheme but the monitor did not enforce it: 7 x 2% = 14% could open at once in a
+   ~0.7-correlated cluster); **a real daily brake** (`max_daily_loss` 6% was in the config
+   and never checked -> now a closed PnL for the UTC day <= -6% blocks new capital entries
+   + a CRITICAL ntfy alert); **explicit ccxt timeout** (10s, `OSCILION_CCXT_TIMEOUT_MS`) + a
+   slow-tick WARN; and the monitor state is **only persisted after a successful step**
+   (before, a `finally` saved a possibly corrupt state that a restart would rehydrate).
 
-## 🎯 Puntos abiertos
+## Open points
 
-- Acumular ≥50 trades forward del núcleo gateado antes de cualquier veredicto de edge.
-- Si llega ejecución real (paper→live): comparar fill real vs `cost_audit` modelado y
-  recalibrar slippage de stop si el real es peor.
+- Accumulate >= 50 forward trades from the gated core before any edge verdict.
+- If real execution arrives (paper -> live): compare real fills vs the modeled
+  `cost_audit` and recalibrate stop slippage if the real one is worse.
 
-## 🗂️ Histórico de revisiones
-- **2026-06-08** (datos 06–08 jun): 2 entradas TRX abiertas, sin cierres. Detectado: posiciones opuestas mismo símbolo, `tp=1e+18`, mono-TRX (resto ESPERANDO), faltaba logging de cierre.
-- **2026-06-10** (datos 08–10 jun): primer ciclo de 5 trades cerrados (−4.07R).
-- **2026-06-12** (datos 10–12 jun): deploy confirmado en vivo (cost_audit poblado, 0 errores);
-  2 cierres pre-gate (DOGE/ETH vwap −1.04R c/u); 1ª entrada gateada legítima (AVAX, abierta).
-  Acumulado 7 cerrados ≈ −6.2R, todos pre-gate. Veredicto de edge sigue pendiente de muestra gateada.
+## Review history
+- **2026-06-08** (data 06-08 Jun): 2 open TRX entries, no closes. Detected: opposite
+  positions on the same symbol, `tp=1e+18`, mono-TRX (the rest WAITING), missing close
+  logging.
+- **2026-06-10** (data 08-10 Jun): first cycle of 5 closed trades (-4.07R).
+- **2026-06-12** (data 10-12 Jun): deployment confirmed live (cost_audit populated, 0
+  errors); 2 pre-gate closes (DOGE/ETH vwap -1.04R each); first legitimate gated entry
+  (AVAX, open). Cumulative 7 closed ~ -6.2R, all pre-gate. The edge verdict is still
+  pending a gated sample.
