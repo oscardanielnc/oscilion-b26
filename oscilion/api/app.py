@@ -1,11 +1,12 @@
-"""API FastAPI — endpoints de salud y estado (esqueleto Fase 1).
+"""FastAPI app: read-only endpoints for the dashboard.
 
-Lee de la DB (la API nunca escribe lógica de trading). El dashboard React
-llegará en Fase 6; por ahora sirve /health, /status y los últimos eventos.
+Reads from the DB and the orchestrator's state file; the API never runs trading
+logic. The built React dashboard (frontend/dist) is served at "/".
 """
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,13 +15,15 @@ from config import DATA_DIR, config
 from oscilion import __version__
 from oscilion.persistence import db
 
-app = FastAPI(title="Oscilion API", version=__version__)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-
-@app.on_event("startup")
-def _startup() -> None:
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
     db.init_db()
+    yield
+
+
+app = FastAPI(title="Oscilion API", version=__version__, lifespan=_lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/health")
@@ -45,7 +48,7 @@ def status() -> dict:
 
 @app.get("/data")
 def data_status() -> list[dict]:
-    """Estado/auditoría del histórico descargado (Fase 2)."""
+    """Status/audit of the downloaded history."""
     with db._lock:
         rows = db.get_connection().execute(
             "SELECT exchange, sym, tf, source, rows, gaps, dupes, first_ts, last_ts, updated_at"
@@ -56,16 +59,16 @@ def data_status() -> list[dict]:
 
 @app.get("/state")
 def live_state() -> dict:
-    """Estado en vivo de la máquina por moneda (publicado por el orquestador)."""
+    """Live state per coin (published by the orchestrator)."""
     f = DATA_DIR / "state.json"
     if not f.exists():
-        return {"ts": None, "symbols": [], "note": "orquestador no ha publicado estado aún"}
+        return {"ts": None, "symbols": [], "note": "the orchestrator has not published any state yet"}
     return json.loads(f.read_text(encoding="utf-8"))
 
 
 @app.get("/signals")
 def signals() -> list[dict]:
-    """Señales en vivo curadas por moneda×estrategia (rango/SL/TP/dirección/RSI/checklist)."""
+    """Curated live signals per coin x strategy (range/SL/TP/direction/RSI/checklist)."""
     from oscilion.live.signals import live_signals
 
     return live_signals()
@@ -73,7 +76,7 @@ def signals() -> list[dict]:
 
 @app.get("/portfolio")
 def portfolio() -> dict:
-    """Config de cartera v1: núcleo, weights, clusters, límites."""
+    """Portfolio config: core, weights, clusters, limits."""
     from oscilion.strategies import all_assignments
     from oscilion.strategies import portfolio as P
 
@@ -86,7 +89,7 @@ def portfolio() -> dict:
 
 @app.get("/alerts")
 def alerts(limit: int = 40) -> list[dict]:
-    """Feed de alertas recientes (ENTRA / SAL / TOMA) del monitor."""
+    """Feed of the monitor's recent alerts (ENTER / EXIT / TAKE_PROFIT)."""
     limit = max(1, min(limit, 200))
     with db._lock:
         rows = db.get_connection().execute(
@@ -98,15 +101,15 @@ def alerts(limit: int = 40) -> list[dict]:
 
 @app.get("/export")
 def export_logs(date_from: str | None = None, date_to: str | None = None, fmt: str = "md"):
-    """Descarga logs del rango [date_from..date_to] (YYYY-MM-DD, días Lima; default hoy).
-    Conciso: sistema + validación forward + trades + alertas + errores. fmt=md|json."""
-    from datetime import datetime, timedelta, timezone
+    """Download logs for [date_from..date_to] (YYYY-MM-DD, UTC-5 days; default today).
+    Concise: system + forward validation + trades + alerts + errors. fmt=md|json."""
+    from datetime import datetime
     from fastapi import Response
     from oscilion.live import export as ex
 
-    hoy = datetime.now(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d")
-    date_from = date_from or hoy
-    date_to = date_to or hoy
+    today = datetime.now(ex.REPORT_TZ).strftime("%Y-%m-%d")
+    date_from = date_from or today
+    date_to = date_to or today
     if fmt == "json":
         body = ex.build_json(date_from, date_to)
         media, suf = "application/json", "json"
@@ -120,7 +123,7 @@ def export_logs(date_from: str | None = None, date_to: str | None = None, fmt: s
 
 @app.get("/snapshots")
 def snapshots(limit: int = 200) -> list[dict]:
-    """Snapshots recientes del observador (estado/dirección/checklist por ciclo)."""
+    """Recent observer snapshots (state/direction/checklist per cycle)."""
     limit = max(1, min(limit, 2000))
     with db._lock:
         rows = db.get_connection().execute(
@@ -132,7 +135,7 @@ def snapshots(limit: int = 200) -> list[dict]:
 
 @app.get("/forward")
 def forward_results() -> list[dict]:
-    """Validación forward: backtest vs vivo por moneda×estrategia (Fase A)."""
+    """Forward validation: backtest vs live per coin x strategy."""
     from oscilion.live.forward import curve
 
     return curve()
@@ -140,7 +143,7 @@ def forward_results() -> list[dict]:
 
 @app.get("/trades")
 def recent_trades(limit: int = 50) -> list[dict]:
-    """Trades virtuales cerrados (con estrategia y R) — feed del frontend."""
+    """Closed virtual trades (with strategy and R), the dashboard feed."""
     limit = max(1, min(limit, 500))
     with db._lock:
         rows = db.get_connection().execute(
@@ -162,7 +165,7 @@ def recent_trades(limit: int = 50) -> list[dict]:
 
 @app.get("/candidates")
 def candidates() -> list[dict]:
-    """Última predicción + decisión por símbolo (ranking más reciente)."""
+    """Latest prediction + decision per symbol (most recent ranking)."""
     with db._lock:
         rows = db.get_connection().execute(
             """
@@ -190,7 +193,7 @@ def events(limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# --- Frontend estático (build de frontend/dist) servido en "/" (al final, no pisa la API) ---
+# Static dashboard (frontend/dist build) served at "/". Mounted last so it does not shadow the API.
 from pathlib import Path  # noqa: E402
 
 from fastapi.staticfiles import StaticFiles  # noqa: E402

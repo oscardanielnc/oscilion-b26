@@ -1,1 +1,1 @@
-"""API FastAPI: estado/historial para el dashboard (esqueleto Fase 1)."""
+"""FastAPI app: state and history for the dashboard."""

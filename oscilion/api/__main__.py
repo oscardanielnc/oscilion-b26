@@ -1,4 +1,4 @@
-"""Lanza la API: `python -m oscilion.api`."""
+"""Start the API: `python -m oscilion.api`."""
 import uvicorn
 
 from config import config
@@ -11,7 +11,7 @@ def main() -> None:
         "oscilion.api.app:app",
         host=config.api_host,
         port=config.api_port,
-        log_level="warning",   # logs mínimos: sin access-log por cada request del dashboard
+        log_level="warning",   # minimal logs: no access log for every dashboard request
         access_log=False,
     )
 
