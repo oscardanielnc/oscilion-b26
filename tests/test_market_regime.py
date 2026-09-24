@@ -1,5 +1,5 @@
-"""Régimen de mercado (beta del benchmark) — fuente única live+backtest (06-29).
-Verifica la clasificación close>EMA y que `bull_at` NO mire al futuro.
+"""Market regime (benchmark beta): single source for live and backtest (06-29).
+Checks the close > EMA classification and that `bull_at` never looks ahead.
 """
 import numpy as np
 import pandas as pd
@@ -17,27 +17,27 @@ def _bars(closes, tf_h=1):
                          "close": c, "volume": np.ones(n)})
 
 
-def test_regime_alcista_vs_bajista():
-    # rampa creciente larga → close por encima de su EMA → alcista al final
+def test_regime_bull_vs_bear():
+    # long rising ramp -> close above its EMA -> bullish at the end
     up = _bars(list(range(1, 200)))
     assert mr.latest_bull(up, tf_h=1, ema_len=50) is True
-    # rampa decreciente → bajista al final
+    # falling ramp -> bearish at the end
     down = _bars(list(range(200, 1, -1)))
     assert mr.latest_bull(down, tf_h=1, ema_len=50) is False
 
 
-def test_regime_sin_datos_es_none():
+def test_regime_without_data_is_none():
     assert mr.latest_bull(_bars([1, 2, 3]), tf_h=1, ema_len=50) is None
     assert mr.bull_at(np.array([]), np.array([], dtype=bool), 123) is None
 
 
-def test_bull_at_sin_lookahead():
+def test_bull_at_no_lookahead():
     closes = list(range(1, 120))
     close_ts, bull = mr.regime_series(_bars(closes), tf_h=1, ema_len=50)
-    # antes del cierre de la primera barra de régimen → None (no inventa pasado)
+    # before the first regime bar closes -> None (does not invent the past)
     assert mr.bull_at(close_ts, bull, int(close_ts[0]) - 1) is None
-    # en t = cierre exacto de una barra → usa ESA barra (cierre ≤ t), no la siguiente
+    # at t = the exact close of a bar -> uses THAT bar (close <= t), not the next one
     idx = 70
     assert mr.bull_at(close_ts, bull, int(close_ts[idx])) == bool(bull[idx])
-    # un instante antes del cierre idx → usa la barra previa
+    # one instant before close idx -> uses the previous bar
     assert mr.bull_at(close_ts, bull, int(close_ts[idx]) - 1) == bool(bull[idx - 1])

@@ -1,4 +1,4 @@
-"""Raíz del proyecto en sys.path para que los tests importen config/oscilion."""
+"""Put the project root on sys.path so tests can import config/oscilion."""
 import os
 import sys
 

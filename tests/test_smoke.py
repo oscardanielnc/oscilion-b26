@@ -1,8 +1,8 @@
-"""Smoke tests — blindaje mínimo para crecer sin romper.
+"""Smoke tests: the minimum safety net to grow without breaking things.
 
-Puros (sin red ni BD): cazan archivos faltantes/sintaxis (el bug de .gitignore
-que ocultó oscilion/data/ habría salido aquí en un checkout limpio), la invariante
-de riesgo, el resampleo causal y que las estrategias no crashean.
+Pure (no network, no DB): they catch missing files/syntax errors (the .gitignore
+bug that hid oscilion/data/ would have shown up here on a clean checkout), the
+risk invariant, causal resampling and strategies that crash.
 """
 import importlib
 import os
@@ -15,24 +15,24 @@ import oscilion
 
 
 def test_all_modules_import():
-    """Importa TODOS los submódulos de oscilion (falla si falta algún archivo)."""
+    """Import EVERY oscilion submodule (fails if any file is missing)."""
     failed = []
     for m in pkgutil.walk_packages(oscilion.__path__, "oscilion."):
         try:
             importlib.import_module(m.name)
         except Exception as e:  # noqa: BLE001
             failed.append((m.name, repr(e)))
-    assert not failed, f"Módulos que no importan: {failed}"
+    assert not failed, f"Modules that fail to import: {failed}"
 
 
 def test_data_package_present():
-    """oscilion.data debe existir (regresión del bug de .gitignore)."""
+    """oscilion.data must exist (regression of the .gitignore bug)."""
     import oscilion.data.fetch  # noqa: F401
     import oscilion.data.store  # noqa: F401
 
 
 def test_risk_invariant():
-    """Stop 2% → L y RR exactos; pérdida al stop = 2% del margen."""
+    """2% stop -> exact L and RR; loss at the stop = 2% of the margin."""
     from oscilion.risk import sizing
     m = sizing.compute("long", entry=100, stop=98, tp=105)
     assert abs(m.stop_pct - 0.02) < 1e-9
@@ -42,19 +42,19 @@ def test_risk_invariant():
 
 
 def test_resample_causal():
-    """1h→4h: agrega bien y DESCARTA el bucket incompleto (sin look-ahead)."""
+    """1h -> 4h: aggregates correctly and DROPS the incomplete bucket (no look-ahead)."""
     from oscilion.backtest.resample import resample_ohlcv
     h = 3_600_000
     df = pd.DataFrame([{"ts": i * h, "open": i, "high": i + 2, "low": i - 1,
-                        "close": i + 1, "volume": 1} for i in range(9)])  # 9 velas
+                        "close": i + 1, "volume": 1} for i in range(9)])  # 9 candles
     out = resample_ohlcv(df, 4)
-    assert len(out) == 2                       # 8 completas → 2 buckets; la 9na se descarta
+    assert len(out) == 2                       # 8 complete -> 2 buckets; the 9th is dropped
     assert out.iloc[0]["open"] == 0 and out.iloc[0]["close"] == 4
     assert out.iloc[0]["high"] == 5 and out.iloc[0]["low"] == -1
 
 
 def test_strategies_no_crash():
-    """Las estrategias del núcleo no explotan con un contexto sintético."""
+    """The core strategies do not blow up on a synthetic context."""
     from oscilion.strategies import library as S
     n = 120
     a = lambda v: np.full(n, v, dtype=float)  # noqa: E731
@@ -67,10 +67,10 @@ def test_strategies_no_crash():
         assert out is None or "side" in out
 
 
-def test_production_no_importa_research():
-    """El path de PRODUCCIÓN (orquestador/API/live) NO debe importar módulos de
-    research/legacy (analysis, scoring, risk, backtest.engine/metrics/report,
-    features.{ranges,regime,reversion}, signals.entry). Mantiene la separación."""
+def test_production_does_not_import_research():
+    """The PRODUCTION path (orchestrator/API/live) must NOT import the research-only
+    modules (analysis, scoring, risk, backtest.engine/metrics/report,
+    features.{ranges,regime,reversion}, signals.entry). Keeps the separation."""
     import subprocess
     import sys as _sys
     code = (
@@ -87,14 +87,13 @@ def test_production_no_importa_research():
                          cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assert out.returncode == 0, out.stderr
     bad = out.stdout.strip().replace("BAD:", "")
-    assert bad == "", f"Producción importa research: {bad}"
+    assert bad == "", f"Production imports research modules: {bad}"
 
 
 def test_universe_single_source():
-    """config.symbols deriva del núcleo de assignment (fuente única)."""
-    import os
+    """config.symbols derives from the assignment core (single source)."""
     if os.getenv("OSCILION_SYMBOLS"):
-        return  # override por env: no aplica
+        return  # env override: not applicable
     from config import config
     from oscilion.strategies.assignment import core_symbols
     assert set(config.symbols) == set(core_symbols())
