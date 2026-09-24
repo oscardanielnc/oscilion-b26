@@ -20,7 +20,7 @@ sudo bash /tmp/setup_vm.sh
 Esto:
 1. crea el usuario de servicio `oscilion` y `/opt/oscilion`,
 2. instala python/venv/git, clona el repo, crea el venv e instala dependencias,
-3. crea `/etc/oscilion.env` (con `OSCILION_NTFY_TOPIC=oscar-oscilion-b26` y modo `dry-run`)
+3. crea `/etc/oscilion.env` (con `OSCILION_NTFY_TOPIC=<tu-canal-privado>` y modo `dry-run`)
    y **fija `OSCILION_FORWARD_INCEPTION_MS` a la fecha de despliegue** (de aquí en
    adelante = datos no vistos = forward real),
 4. **siembra 3 años de histórico** de las monedas del núcleo (las que define
@@ -38,8 +38,8 @@ sudo -u oscilion /opt/oscilion/.venv/bin/python -m oscilion.live.forward   # tab
 ```
 
 ## 3. Alertas al móvil (ntfy)
-Instala la app **ntfy** (iOS/Android) → suscríbete al canal **`oscar-oscilion-b26`**.
-Recibirás ENTRA / SAL / TOMA en tiempo real. (Prueba: `curl -d "test" ntfy.sh/oscar-oscilion-b26`.)
+Instala la app **ntfy** (iOS/Android) → suscríbete al canal **`<tu-canal-privado>`**.
+Recibirás ENTRA / SAL / TOMA en tiempo real. (Prueba: `curl -d "test" ntfy.sh/<tu-canal-privado>`.)
 
 ## 4. Ver el dashboard (seguro, sin exponer puertos)
 La API escucha en `127.0.0.1:8787` (no expuesta a internet). Desde tu PC, túnel SSH:

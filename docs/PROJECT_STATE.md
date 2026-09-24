@@ -248,7 +248,7 @@ python -m oscilion.live.forward     # revisión backtest vs forward
 python -m pytest tests/ -q          # 23 tests
 ```
 Deploy: Oscar hace `git push` → en la VM `bash /opt/oscilion/deploy.sh`. La BD migra a
-schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://213.35.121.9:8787.
+schema v6 sola (migraciones idempotentes al arrancar). Dashboard http://<IP_VM>:8787.
 
 ## 5. Hecho ✅
 - Pilot v1 + frontend + VM Oracle (dry-run) + ntfy + export diario.
