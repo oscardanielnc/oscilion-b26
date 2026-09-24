@@ -1,16 +1,16 @@
-"""Score de convicción 0–100 por moneda (Fase 3).
+"""0-100 conviction score per coin.
 
-Combina señales independientes en un score interpretable:
+Combines independent signals into an interpretable score:
 
-  componente        peso   premia
-  ───────────────── ────   ─────────────────────────────────────────
-  régimen de rango  0.30   range_quality (rango limpio, no tendencia/caos)
-  reversión         0.30   Hurst<0.5, VR<1, ADF estacionario, half-life útil
-  ubicación         0.25   precio CERCA de un borde (no en medio del rango)
-  volatilidad       0.15   vol baja/normal (penaliza vol alta; evita caos)
+  component         weight  rewards
+  ----------------- ------  -----------------------------------------------
+  range regime      0.30    range_quality (clean range, not trend/chaos)
+  reversion         0.30    Hurst < 0.5, VR < 1, stationary ADF, useful half-life
+  location          0.25    price NEAR an edge (not in the middle of the range)
+  volatility        0.15    low/normal vol (penalizes high vol; avoids chaos)
 
-Determina el `side` por el borde cercano: cerca del inferior ⇒ long; del
-superior ⇒ short; en el medio ⇒ sin señal clara (ubicación baja).
+The `side` comes from the nearest edge: near the lower one => long; near the
+upper one => short; in the middle => no clear signal (low location score).
 """
 from __future__ import annotations
 
@@ -23,20 +23,20 @@ from oscilion.features import reversion as rev
 from oscilion.features import indicators as ind
 
 WEIGHTS = {"regime": 0.30, "reversion": 0.30, "location": 0.25, "vol": 0.15}
-EDGE_LONG = 0.35    # position ≤ ⇒ cerca del borde inferior
-EDGE_SHORT = 0.65   # position ≥ ⇒ cerca del borde superior
+EDGE_LONG = 0.35    # position <= this => near the lower edge
+EDGE_SHORT = 0.65   # position >= this => near the upper edge
 
 
 def conviction(df: pd.DataFrame, lookback: int = 96) -> dict:
-    """Score 0-100 + side + bordes del rango + componentes, en la última barra."""
+    """0-100 score + side + range edges + components, at the last bar."""
     if len(df) < 40:
-        return _empty("datos insuficientes")
+        return _empty("insufficient data")
 
     regime = rg.classify_regime(df, lookback)
     hz = rng.horizontal_range(df, lookback)
     chan = rng.diagonal_channel(df, lookback)
 
-    # elegir la estructura de rango más fiable
+    # pick the most reliable range structure
     use_diag = (chan["r2"] >= 0.55) and (hz["quality"] < 0.5)
     edge = chan if use_diag else hz
     lo, hi = edge["lower" if use_diag else "lo"], edge["upper" if use_diag else "hi"]
@@ -44,9 +44,8 @@ def conviction(df: pd.DataFrame, lookback: int = 96) -> dict:
     last = float(df["close"].iloc[-1])
 
     if not np.isfinite(position):
-        return _empty("rango no definido")
+        return _empty("range not defined")
 
-    # side por cercanía a un borde
     if position <= EDGE_LONG:
         side, loc = "long", _clamp01((EDGE_LONG - position) / EDGE_LONG)
     elif position >= EDGE_SHORT:
@@ -66,7 +65,7 @@ def conviction(df: pd.DataFrame, lookback: int = 96) -> dict:
     raw = sum(WEIGHTS[k] * comps[k] for k in WEIGHTS)
     score = float(100 * raw)
     if regime.regime == "chaos" or side is None:
-        score *= 0.4   # sin claridad ⇒ no operar (CLAUDE.md)
+        score *= 0.4   # no clarity => do not trade
 
     return {
         "score": round(score, 1), "side": side, "regime": regime.regime,

@@ -1,9 +1,9 @@
-"""Stop anti-barridas (RISK_MODEL.md §4).
+"""Anti-sweep stop (RISK_MODEL.md section 4).
 
-El nivel obvio (borde del rango) es donde cazan stops. El stop seguro va MÁS
-ALLÁ del clúster de liquidez + un buffer de ATR (ruido típico de la moneda).
-Si queda más lejos, el apalancamiento baja solo (sizing); la pérdida sigue en
-el 2%, sin costo de riesgo extra.
+The obvious level (the range edge) is where stops get hunted. The safe stop goes
+BEYOND the liquidity cluster + an ATR buffer (the coin's typical noise). If that
+puts it further away, leverage drops automatically (sizing); the loss stays at
+2%, with no extra risk cost.
 """
 from __future__ import annotations
 
@@ -19,21 +19,21 @@ from oscilion.features import indicators as ind
 class StopResult:
     stop: float
     stop_pct: float
-    basis: str          # de dónde sale el stop
+    basis: str          # where the stop comes from
 
 
 def safe_stop(df: pd.DataFrame, side: str, entry: float, *,
               range_lo: float | None = None, range_hi: float | None = None,
               atr_n: int = 14, buffer_atr: float = 1.0,
               swing_lookback: int = 24) -> StopResult:
-    """Stop más allá del swing/clúster reciente + buffer ATR.
+    """Stop beyond the recent swing/cluster + an ATR buffer.
 
-    long  → stop = min(borde_inf, swing_low_reciente) − buffer·ATR
-    short → stop = max(borde_sup, swing_high_reciente) + buffer·ATR
+    long  -> stop = min(lower_edge, recent_swing_low) - buffer * ATR
+    short -> stop = max(upper_edge, recent_swing_high) + buffer * ATR
     """
     a = float(ind.atr(df, atr_n).iloc[-1])
     if not np.isfinite(a) or a <= 0:
-        a = entry * 0.005  # fallback prudente
+        a = entry * 0.005  # conservative fallback
 
     tail = df.tail(swing_lookback)
     swing_low = float(tail["low"].min())

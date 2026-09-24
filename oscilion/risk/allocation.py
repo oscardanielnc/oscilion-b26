@@ -1,13 +1,13 @@
-"""Asignación de cartera (RISK_MODEL.md §5).
+"""Portfolio allocation (RISK_MODEL.md section 5).
 
-peso_i ∝ f(convicción_i, 1/volatilidad_i, correlación_entre_elegidas)
+weight_i ~ f(conviction_i, 1/volatility_i, correlation among the chosen ones)
 
-- Convicción (score) → más capital al más probable.
-- Volatilidad → menos a la más errática.
-- Correlación ⚠️ → 3 longs correlacionados = 1 apuesta triplicada. Se penaliza.
-- Kelly fraccionado: acota el tamaño total; nunca al 100% por defecto.
+- Conviction (score): more capital to the most likely setup.
+- Volatility: less to the most erratic one.
+- Correlation: 3 correlated longs = 1 tripled bet. Penalized.
+- Fractional Kelly: caps the total size; never 100% by default.
 
-Cada moneda mantiene su −2%/+5% sobre SU margen; esto reparte el capital total.
+Each coin keeps its -2%/+5% on ITS margin; this splits the total capital.
 """
 from __future__ import annotations
 
@@ -15,30 +15,30 @@ import numpy as np
 
 from config import config
 
-KELLY_FRACTION = 0.5     # fracción de Kelly (conservador)
-MAX_TOTAL_EXPOSURE = 1.0  # fracción máx del capital desplegada a la vez
+KELLY_FRACTION = 0.5     # conservative
+MAX_TOTAL_EXPOSURE = 1.0  # max fraction of capital deployed at once
 
 
 def allocate(candidates: list[dict], capital: float, *,
              corr: dict[tuple[str, str], float] | None = None,
              max_concurrent: int | None = None) -> list[dict]:
-    """Reparte `capital` entre candidatos operables.
+    """Split `capital` among tradeable candidates.
 
-    Cada candidato requiere: sym, score (0-100), vol (>0). Devuelve la lista
-    (top max_concurrent) con `weight` y `margin` (capital asignado) añadidos.
+    Each candidate needs: sym, score (0-100), vol (> 0). Returns the list
+    (top max_concurrent) with `weight` and `margin` (allocated capital) added.
     """
     max_concurrent = max_concurrent or config.max_concurrent
-    elegibles = [c for c in candidates if c.get("tradeable") and c.get("score", 0) > 0
+    eligible = [c for c in candidates if c.get("tradeable") and c.get("score", 0) > 0
                  and c.get("vol", 0) > 0]
-    if not elegibles:
+    if not eligible:
         return []
 
-    # 1) convicción × inverso de volatilidad
-    elegibles.sort(key=lambda c: c["score"], reverse=True)
-    chosen = elegibles[:max_concurrent]
+    # 1) conviction x inverse volatility
+    eligible.sort(key=lambda c: c["score"], reverse=True)
+    chosen = eligible[:max_concurrent]
     raw = np.array([c["score"] * (1.0 / c["vol"]) for c in chosen], dtype="float64")
 
-    # 2) haircut por correlación con las demás elegidas
+    # 2) haircut for correlation with the other chosen candidates
     if corr:
         hair = []
         for i, ci in enumerate(chosen):
@@ -48,9 +48,9 @@ def allocate(candidates: list[dict], capital: float, *,
             hair.append(1.0 / (1.0 + avg_corr * (len(chosen) - 1)))
         raw = raw * np.array(hair)
 
-    # 3) normalizar + Kelly fraccionado + techo de exposición
+    # 3) normalize + fractional Kelly + exposure cap
     weights = raw / raw.sum() if raw.sum() > 0 else raw
-    deploy = min(MAX_TOTAL_EXPOSURE, KELLY_FRACTION + 0.0)  # conservador
+    deploy = min(MAX_TOTAL_EXPOSURE, KELLY_FRACTION)
     weights = weights * deploy
 
     out = []

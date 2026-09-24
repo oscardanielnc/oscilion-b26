@@ -1,10 +1,10 @@
-"""Sizing y apalancamiento (RISK_MODEL.md §1-2).
+"""Sizing and leverage (RISK_MODEL.md sections 1-2).
 
-Ecuación maestra:  L = riesgo_máx(%) ÷ distancia_stop(%)
-⇒ pérdida si salta el stop = riesgo_máx · margen (fijo, p.ej. 2%).
-⇒ ganancia a meta = riesgo_máx · RR.
+Master equation:  L = max_risk(%) / stop_distance(%)
+=> loss if the stop fires = max_risk * margin (fixed, e.g. 2%).
+=> gain at target = max_risk * RR.
 
-Filtro duro: una moneda con RR < min_rr NO se opera (no es preferencia).
+Hard filter: a coin with RR < min_rr is NOT traded (not a preference).
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from config import config
 
-MAX_LEVERAGE = 25.0  # techo de seguridad operativo
+MAX_LEVERAGE = 25.0  # operational safety ceiling
 
 
 @dataclass
@@ -25,26 +25,20 @@ class TradeMath:
     profit_pct: float
     rr: float
     leverage: float
-    tradeable: bool          # cumple RR ≥ min_rr y geometría válida
+    tradeable: bool          # RR >= min_rr and valid geometry
 
 
 def leverage(stop_pct: float, risk: float | None = None) -> float:
-    """L = riesgo / stop%. Acotado a [0, MAX_LEVERAGE]."""
+    """L = risk / stop%. Bounded to [0, MAX_LEVERAGE]."""
     risk = config.risk_per_trade if risk is None else risk
     if stop_pct <= 0:
         return 0.0
     return float(min(MAX_LEVERAGE, risk / stop_pct))
 
 
-def target_from_rr(side: str, entry: float, stop: float, rr: float) -> float:
-    """Precio de TP para un RR dado, según la distancia al stop."""
-    risk_dist = abs(entry - stop)
-    return entry + rr * risk_dist if side == "long" else entry - rr * risk_dist
-
-
 def compute(side: str, entry: float, stop: float, tp: float,
             risk: float | None = None, min_rr: float | None = None) -> TradeMath:
-    """Calcula stop%, profit%, RR, L y si es operable."""
+    """Compute stop%, profit%, RR, L and whether the trade is tradeable."""
     risk = config.risk_per_trade if risk is None else risk
     min_rr = config.min_rr if min_rr is None else min_rr
 
@@ -64,9 +58,9 @@ def compute(side: str, entry: float, stop: float, tp: float,
 
 
 def position_size(margin: float, stop_pct: float, risk: float | None = None) -> dict:
-    """Tamaño desde el margen asignado a ESE trade.
+    """Size from the margin allocated to THAT trade.
 
-    notional = margin · L ; pérdida al stop = notional · stop% = margin · riesgo.
+    notional = margin * L; loss at stop = notional * stop% = margin * risk.
     """
     risk = config.risk_per_trade if risk is None else risk
     lev = leverage(stop_pct, risk)

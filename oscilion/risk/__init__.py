@@ -1,1 +1,1 @@
-"""Riesgo: stops anti-barridas, sizing (L=2%/stop), allocation (Fase 3)."""
+"""Risk: anti-sweep stops, sizing (L = 2% / stop), allocation."""

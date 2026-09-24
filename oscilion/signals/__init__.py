@@ -1,1 +1,1 @@
-"""Señales: máquina de estados, entry, exit, maker/taker (Fase 5)."""
+"""Signals: turn confirmation helper."""
