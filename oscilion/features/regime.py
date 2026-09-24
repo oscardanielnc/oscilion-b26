@@ -1,10 +1,10 @@
-"""Clasificación de régimen (Fase 3): rango | tendencia | caos.
+"""Regime classification: range | trend | chaos.
 
-Combina varias señales independientes (ADX, Hurst, variance ratio, R² del
-canal y pendiente, ancho de Bollinger) para decidir el régimen y entregar una
-`range_quality` continua 0..1 que el scoring usa directamente.
+Combines several independent signals (ADX, Hurst, variance ratio, channel R^2
+and slope, Bollinger width) to decide the regime and produce a continuous
+`range_quality` in 0..1 that scoring uses directly.
 
-Solo se opera lo predecible (CLAUDE.md): si no hay claridad ⇒ 'chaos' ⇒ no operar.
+Only trade what is predictable (docs/VISION.md): no clarity => 'chaos' => no trade.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from oscilion.features import indicators as ind
 from oscilion.features import ranges as rng
 from oscilion.features import reversion as rev
 
-# umbrales (ajustables; documentados en RISK/VISION)
-ADX_TREND = 25.0     # ADX ≥ ⇒ hay tendencia
-ADX_RANGE = 20.0     # ADX < ⇒ sin tendencia
-R2_TREND = 0.55      # R² del canal alto ⇒ direccional limpio
+# thresholds (tunable; documented in RISK_MODEL/VISION)
+ADX_TREND = 25.0     # ADX >= this => trending
+ADX_RANGE = 20.0     # ADX < this => no trend
+R2_TREND = 0.55      # high channel R^2 => clean directional move
 
 
 @dataclass
@@ -46,7 +46,7 @@ def _vol_regime(df: pd.DataFrame, n: int = 14, lookback: int = 240) -> tuple[str
 def classify_regime(df: pd.DataFrame, lookback: int = 96) -> RegimeResult:
     if len(df) < 30:
         return RegimeResult("chaos", 0.0, "normal", float("nan"),
-                            {"reason": "datos insuficientes"})
+                            {"reason": "insufficient data"})
 
     adx_last = float(ind.adx(df).iloc[-1]["adx"])
     bb = ind.bollinger(df["close"]).iloc[-1]
@@ -59,7 +59,6 @@ def classify_regime(df: pd.DataFrame, lookback: int = 96) -> RegimeResult:
     r2 = chan["r2"]
     slope_pct = abs(chan["slope_pct"]) if np.isfinite(chan["slope_pct"]) else 0.0
 
-    # --- decisión de régimen ---
     trend_like = (adx_last >= ADX_TREND) and (r2 >= R2_TREND)
     range_like = (adx_last < ADX_RANGE) and (np.isfinite(h) and h < 0.5)
 
@@ -68,20 +67,20 @@ def classify_regime(df: pd.DataFrame, lookback: int = 96) -> RegimeResult:
     elif range_like and not trend_like:
         regime = "range"
     elif not trend_like and not range_like:
-        # ni claramente tendencia ni rango limpio
+        # neither a clear trend nor a clean range
         regime = "range" if hz["quality"] > 0.5 else "chaos"
     else:
         regime = "chaos"
 
-    # --- range_quality continua (0..1) ---
-    s_adx = _clamp01((ADX_TREND - adx_last) / ADX_TREND)         # menos ADX, mejor
+    # --- continuous range_quality (0..1) ---
+    s_adx = _clamp01((ADX_TREND - adx_last) / ADX_TREND)         # lower ADX is better
     s_hurst = _clamp01((0.5 - h) / 0.3) if np.isfinite(h) else 0.0
     s_vr = _clamp01((1.0 - vr) / 0.4) if np.isfinite(vr) else 0.0
     s_hz = float(hz["quality"])
     s_flat = _clamp01(1.0 - slope_pct / max(hz["width_pct"], 1e-9)) if np.isfinite(hz["width_pct"]) else 0.0
     range_quality = float(np.mean([s_adx, s_hurst, s_vr, s_hz, s_flat]))
     if regime == "chaos":
-        range_quality *= 0.3                                      # penaliza el caos
+        range_quality *= 0.3                                      # penalize chaos
 
     return RegimeResult(
         regime=regime, range_quality=range_quality, vol_regime=vol_reg, atr_pct=atrp,

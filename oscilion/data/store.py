@@ -1,15 +1,15 @@
-"""Persistencia de datos limpios: parquet (detalle) + DB (resumen auditable).
+"""Clean data persistence: parquet (detail) + DB (auditable summary).
 
-Layout en disco:
+On-disk layout:
     data/ohlcv/<exchange>/<SYM>/<tf>.parquet
     data/funding/<exchange>/<SYM>.parquet
 
-Garantías:
-  • `clean_bars` valida sanidad OHLC y elimina duplicados/NaN.
-  • `save_bars` hace MERGE idempotente con lo existente (sin perder histórico),
-    escritura atómica (tmp + replace).
-  • `gaps_report` detecta velas faltantes según el timeframe.
-  • cada guardado actualiza `ohlcv_status` en la DB (auditoría).
+Guarantees:
+  - `clean_bars` validates OHLC sanity and removes duplicates/NaN.
+  - `save_bars` does an idempotent MERGE with existing data (no history lost),
+    with an atomic write (tmp + replace).
+  - `gaps_report` detects missing candles for the timeframe.
+  - every save updates `ohlcv_status` in the DB (audit).
 """
 from __future__ import annotations
 
@@ -50,16 +50,16 @@ def _atomic_write(df: pd.DataFrame, path) -> None:
     os.replace(tmp, path)
 
 
-# ------------------------------- limpieza -------------------------------
+# ------------------------------- cleaning -------------------------------
 def clean_bars(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    """Devuelve (df_limpio, n_duplicados_removidos). Valida sanidad OHLC."""
+    """Return (clean_df, n_duplicates_removed). Validates OHLC sanity."""
     if df.empty:
         return df.reindex(columns=OHLCV_COLS), 0
     df = df.copy()
     for c in OHLCV_COLS:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.dropna(subset=OHLCV_COLS)
-    # sanidad: high es el máximo y low el mínimo del rango
+    # sanity: high is the max and low the min of the candle
     hi = df[["open", "close", "high"]].max(axis=1)
     lo = df[["open", "close", "low"]].min(axis=1)
     sane = (df["high"] >= df["low"]) & (df["high"] >= hi) & (df["low"] <= lo) & (df["volume"] >= 0)
@@ -72,7 +72,7 @@ def clean_bars(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
 
 def gaps_report(df: pd.DataFrame, tf: str) -> list[dict]:
-    """Lista de huecos: cada uno {from_ts, to_ts, missing} según el timeframe."""
+    """List of gaps, each {from_ts, to_ts, missing}, for the timeframe."""
     if len(df) < 2:
         return []
     tf_ms = timeframe_to_ms(tf)
@@ -100,16 +100,16 @@ def load_bars(sym: str, tf: str, *, since: int | None = None, until: int | None 
 
 
 def save_bars(sym: str, tf: str, df_new: pd.DataFrame) -> dict:
-    """Merge idempotente con lo existente. Devuelve resumen de calidad.
+    """Idempotent merge with existing data. Returns a quality summary.
 
-    `dupes` cuenta solo duplicados ANÓMALOS dentro del lote descargado
-    (exchange devolviendo velas repetidas). El solapamiento normal con el
-    histórico ya guardado se deduplica en silencio (es esperado al re-sync).
+    `dupes` counts only ANOMALOUS duplicates inside the downloaded batch (the
+    exchange returning repeated candles). The normal overlap with stored history
+    is deduplicated silently (expected on re-sync).
     """
-    new_clean, dupes = clean_bars(df_new)  # anomalías reales del fetch
+    new_clean, dupes = clean_bars(df_new)
     existing = load_bars(sym, tf)
     merged = pd.concat([existing, new_clean], ignore_index=True) if not existing.empty else new_clean
-    clean, _overlap = clean_bars(merged)   # overlap esperado, no es anomalía
+    clean, _overlap = clean_bars(merged)
     _atomic_write(clean, _ohlcv_path(sym, tf))
 
     gaps = gaps_report(clean, tf)

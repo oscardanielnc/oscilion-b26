@@ -1,17 +1,17 @@
-"""Régimen de MERCADO (beta del benchmark) — FUENTE ÚNICA (live + backtest).
+"""MARKET regime (benchmark beta): SINGLE SOURCE for live and backtest.
 
-Distinto de `features/regime.py` (rango|tendencia|caos POR SÍMBOLO). Aquí el
-benchmark (BTC) define si el mercado base está alcista o bajista, para no operar
-A FAVOR de la beta cuando va EN CONTRA del lado del trade.
+Different from `features/regime.py` (range|trend|chaos PER SYMBOL). Here the
+benchmark (BTC) decides whether the base market is bullish or bearish, so a
+trade is not taken while the market beta runs AGAINST its side.
 
-La auditoría 06-29 mostró que los largos de continuación (vwap_anchor) sangran al
-caer el mercado: 17/17 entradas LONG en alts bajando = trampas alcistas (−11R).
-El cálculo vive aquí para que el monitor en vivo y el motor de backtest usen la
-MISMA definición (igual que el modelo de costos es fuente única) y no diverjan.
+Audit 06-29 showed that continuation longs (vwap_anchor) bleed when the market
+falls: 17/17 LONG entries on falling alts were bull traps (-11R). The computation
+lives here so the live monitor and the backtest engine use the SAME definition
+(just like the cost model is a single source) and cannot diverge.
 
-Definición: alcista si close > EMA(`ema_len`) en el TF `tf_h` (resampleado del 1h).
-Sin look-ahead: el régimen que aplica a una señal cerrada en T usa la barra de
-régimen cuyo CIERRE ≤ T.
+Definition: bullish if close > EMA(`ema_len`) on the `tf_h` TF (resampled from 1h).
+No look-ahead: the regime applied to a signal closed at T uses the regime bar
+whose CLOSE <= T.
 """
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ _H = 3_600_000
 
 
 def regime_series(bars_1h: pd.DataFrame, tf_h: int, ema_len: int) -> tuple[np.ndarray, np.ndarray]:
-    """Devuelve (close_ts, bull) por barra de régimen.
+    """Return (close_ts, bull) per regime bar.
 
-    `close_ts` = epoch ms del CIERRE de cada barra del TF (open_ts + tf_h·1h).
-    `bull` = close > EMA(ema_len). Arrays vacíos si no hay datos suficientes.
+    `close_ts` = epoch ms of each TF bar's CLOSE (open_ts + tf_h * 1h).
+    `bull` = close > EMA(ema_len). Empty arrays if there is not enough data.
     """
     if bars_1h is None or bars_1h.empty or len(bars_1h) < 60:
         return np.array([]), np.array([], dtype=bool)
@@ -42,8 +42,8 @@ def regime_series(bars_1h: pd.DataFrame, tf_h: int, ema_len: int) -> tuple[np.nd
 
 
 def bull_at(close_ts: np.ndarray, bull: np.ndarray, t_ms: int) -> bool | None:
-    """Régimen vigente en el instante `t_ms` (última barra cuyo cierre ≤ t_ms).
-    None si no hay barra previa (sin datos / antes del primer cierre)."""
+    """Regime in force at `t_ms` (last bar whose close <= t_ms).
+    None if there is no prior bar (no data / before the first close)."""
     if close_ts.size == 0:
         return None
     idx = int(np.searchsorted(close_ts, t_ms, side="right")) - 1
@@ -53,7 +53,7 @@ def bull_at(close_ts: np.ndarray, bull: np.ndarray, t_ms: int) -> bool | None:
 
 
 def latest_bull(bars_1h: pd.DataFrame, tf_h: int, ema_len: int) -> bool | None:
-    """Régimen MÁS RECIENTE (para el monitor en vivo). None si no hay datos."""
+    """MOST RECENT regime (for the live monitor). None if there is no data."""
     close_ts, bull = regime_series(bars_1h, tf_h, ema_len)
     if close_ts.size == 0:
         return None

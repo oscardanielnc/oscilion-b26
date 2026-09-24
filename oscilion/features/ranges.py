@@ -1,12 +1,12 @@
-"""Detección de rangos: horizontal y canal diagonal (Fase 3).
+"""Range detection: horizontal range and diagonal channel.
 
-Sobre las últimas `lookback` velas cerradas:
-  • horizontal_range — banda [lo,hi] robusta a mechas (cuantiles), con métricas
-    de calidad: planitud (pendiente ~0), toques de borde y % de cierres dentro.
-  • diagonal_channel — regresión lineal de cierres ± k·σ_residual; pendiente,
-    R², ancho y posición del precio dentro del canal.
+Over the last `lookback` closed candles:
+  - horizontal_range: [lo, hi] band robust to wicks (quantiles), with quality
+    metrics: flatness (slope ~0), edge touches and % of closes inside.
+  - diagonal_channel: linear regression of closes +/- k * residual sigma; slope,
+    R^2, width and price position inside the channel.
 
-Ambas devuelven dicts con el estado evaluado en la ÚLTIMA barra.
+Both return dicts with the state evaluated at the LAST bar.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import pandas as pd
 
 def horizontal_range(df: pd.DataFrame, lookback: int = 96, q: float = 0.05,
                      touch_tol: float = 0.0015) -> dict:
-    """Banda horizontal robusta. `touch_tol` = tolerancia relativa de toque."""
+    """Robust horizontal band. `touch_tol` = relative touch tolerance."""
     d = df.tail(lookback)
     if len(d) < 10:
         return _empty_range()
@@ -31,22 +31,20 @@ def horizontal_range(df: pd.DataFrame, lookback: int = 96, q: float = 0.05,
     close = d["close"]
     last = float(close.iloc[-1])
 
-    # planitud: pendiente de regresión normalizada ~ 0 en un rango
+    # flatness: in a range the normalized regression slope is ~0
     x = np.arange(len(close))
     slope = np.polyfit(x, close.to_numpy(), 1)[0]
-    slope_pct = slope * len(close) / mid           # deriva total sobre la ventana
+    slope_pct = slope * len(close) / mid           # total drift over the window
     flatness = float(max(0.0, 1.0 - abs(slope_pct) / width_pct)) if width_pct else 0.0
 
-    # toques de cada borde y contención de cierres
     tol = touch_tol
     touches_lo = int((d["low"] <= lo * (1 + tol)).sum())
     touches_hi = int((d["high"] >= hi * (1 - tol)).sum())
     inside = float(((close >= lo) & (close <= hi)).mean())
 
-    # posición del precio en el rango: 0=borde inf, 1=borde sup
+    # price position in the range: 0 = lower edge, 1 = upper edge
     pos = float((last - lo) / (hi - lo))
 
-    # calidad combinada (0..1)
     touch_score = min(1.0, (min(touches_lo, touches_hi)) / 3.0)
     quality = float(np.mean([flatness, touch_score, inside]))
 
@@ -57,7 +55,7 @@ def horizontal_range(df: pd.DataFrame, lookback: int = 96, q: float = 0.05,
 
 
 def diagonal_channel(df: pd.DataFrame, lookback: int = 96, k: float = 2.0) -> dict:
-    """Canal diagonal por regresión lineal ± k·σ_residual."""
+    """Diagonal channel: linear regression +/- k * residual sigma."""
     d = df.tail(lookback)
     if len(d) < 10:
         return _empty_channel()
@@ -79,7 +77,7 @@ def diagonal_channel(df: pd.DataFrame, lookback: int = 96, k: float = 2.0) -> di
     lower = center - k * sd
     last = float(y[-1])
     mid = float(y.mean())
-    slope_pct = float(slope * len(y) / mid) if mid else 0.0      # deriva total %
+    slope_pct = float(slope * len(y) / mid) if mid else 0.0      # total drift %
     width_pct = float((upper - lower) / center) if center else 0.0
     pos = float((last - lower) / (upper - lower)) if upper > lower else 0.5
 

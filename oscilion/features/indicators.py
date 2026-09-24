@@ -1,9 +1,9 @@
-"""Indicadores técnicos (Fase 3).
+"""Technical indicators.
 
-Todas las funciones operan sobre velas YA CERRADAS (DataFrame con columnas
-ts,open,high,low,close,volume) y devuelven Series alineadas al índice del df.
-Sin look-ahead: cada valor en t usa solo información ≤ t. `min_periods`
-garantiza NaN hasta tener ventana suficiente (no se inventan valores).
+Every function works on CLOSED candles (DataFrame with columns
+ts,open,high,low,close,volume) and returns Series aligned with the df index.
+No look-ahead: each value at t only uses information <= t. `min_periods`
+keeps NaN until the window is full (no invented values).
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def sma(s: pd.Series, n: int) -> pd.Series:
 
 
 def _wilder(s: pd.Series, n: int) -> pd.Series:
-    """Suavizado de Wilder (RMA): EMA con alpha = 1/n."""
+    """Wilder smoothing (RMA): EMA with alpha = 1/n."""
     return s.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
 
 
@@ -39,7 +39,7 @@ def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
 
 
 def atr_pct(df: pd.DataFrame, n: int = 14) -> pd.Series:
-    """ATR relativo al precio (volatilidad % por barra)."""
+    """ATR relative to price (% volatility per bar)."""
     return atr(df, n) / df["close"]
 
 
@@ -64,20 +64,6 @@ def bollinger(close: pd.Series, n: int = 20, k: float = 2.0) -> pd.DataFrame:
     })
 
 
-def keltner(df: pd.DataFrame, n: int = 20, mult: float = 2.0, atr_n: int = 10) -> pd.DataFrame:
-    mid = ema(df["close"], n)
-    a = atr(df, atr_n)
-    return pd.DataFrame({
-        "kc_mid": mid, "kc_upper": mid + mult * a, "kc_lower": mid - mult * a,
-    })
-
-
-def donchian(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
-    upper = df["high"].rolling(n).max()
-    lower = df["low"].rolling(n).min()
-    return pd.DataFrame({"dc_upper": upper, "dc_lower": lower, "dc_mid": (upper + lower) / 2})
-
-
 def rolling_vwap(df: pd.DataFrame, n: int = 24) -> pd.Series:
     tp = (df["high"] + df["low"] + df["close"]) / 3
     pv = (tp * df["volume"]).rolling(n).sum()
@@ -86,7 +72,7 @@ def rolling_vwap(df: pd.DataFrame, n: int = 24) -> pd.Series:
 
 
 def adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
-    """ADX + DI direccionales (Wilder). adx alto ⇒ tendencia fuerte."""
+    """ADX + directional indices (Wilder). High ADX => strong trend."""
     up = df["high"].diff()
     down = -df["low"].diff()
     plus_dm = np.where((up > down) & (up > 0), up, 0.0)
@@ -97,8 +83,3 @@ def adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     minus_di = 100 * _wilder(pd.Series(minus_dm, index=df.index), n) / atr_
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
     return pd.DataFrame({"adx": _wilder(dx, n), "plus_di": plus_di, "minus_di": minus_di})
-
-
-def realized_vol(close: pd.Series, n: int = 24) -> pd.Series:
-    """Desv. estándar de retornos log en ventana n (vol por barra)."""
-    return np.log(close / close.shift(1)).rolling(n).std(ddof=0)

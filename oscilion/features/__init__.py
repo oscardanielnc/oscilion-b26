@@ -1,1 +1,1 @@
-"""Features: indicadores, rangos, régimen, reversión (Fase 3)."""
+"""Features: indicators, ranges, regime, mean reversion."""

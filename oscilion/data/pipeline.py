@@ -1,8 +1,8 @@
-"""Pipeline de datos (Fase 2): descarga → limpia → persiste → audita.
+"""Data pipeline: download -> clean -> persist -> audit.
 
-`sync_all()` baja OHLCV (todos los TF configurados) + funding para una lista
-de símbolos y devuelve un reporte de calidad por símbolo/TF.
-`quality_report_md()` formatea el estado persistido (tabla `ohlcv_status`).
+`sync_all()` downloads OHLCV (every configured TF) + funding for a list of
+symbols and returns a quality summary per symbol/TF.
+`quality_report_md()` formats the persisted state (`ohlcv_status` table).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _since_days(days: int) -> int:
 
 
 def sync_symbol(sym: str, *, timeframes: list[str], days: int) -> list[dict]:
-    """Sincroniza un símbolo: OHLCV por TF + funding. Devuelve resúmenes."""
+    """Sync one symbol: OHLCV per TF + funding. Returns summaries."""
     since = _since_days(days)
     out: list[dict] = []
     for tf in timeframes:
@@ -30,14 +30,14 @@ def sync_symbol(sym: str, *, timeframes: list[str], days: int) -> list[dict]:
             res = store.save_bars(sym, tf, df)
             out.append(res)
         except Exception:
-            log.exception("Fallo sync OHLCV %s %s", sym, tf)
-            db.log_event("ERROR", "data.pipeline", f"sync OHLCV {sym} {tf} falló")
+            log.exception("OHLCV sync failed %s %s", sym, tf)
+            db.log_event("ERROR", "data.pipeline", f"OHLCV sync {sym} {tf} failed")
     try:
         f = fetch.fetch_funding(sym, since=since)
         store.save_funding(sym, f)
     except Exception:
-        log.exception("Fallo sync funding %s", sym)
-        db.log_event("ERROR", "data.pipeline", f"sync funding {sym} falló")
+        log.exception("funding sync failed %s", sym)
+        db.log_event("ERROR", "data.pipeline", f"funding sync {sym} failed")
     return out
 
 
@@ -48,11 +48,11 @@ def sync_all(
     symbols = symbols or config.symbols
     timeframes = timeframes or [config.base_timeframe, config.fast_timeframe]
     db.init_db()
-    log.info("sync_all | %d símbolos | TF=%s | %d días", len(symbols), timeframes, days)
+    log.info("sync_all | %d symbols | TF=%s | %d days", len(symbols), timeframes, days)
     results: list[dict] = []
     for sym in symbols:
         results.extend(sync_symbol(sym, timeframes=timeframes, days=days))
-    db.log_event("INFO", "data.pipeline", f"sync_all completado: {len(results)} series")
+    db.log_event("INFO", "data.pipeline", f"sync_all done: {len(results)} series")
     return results
 
 
@@ -60,11 +60,11 @@ def backfill_missing(
     symbols: list[str] | None = None, *, min_bars: int = 1500, days: int = 1200,
     timeframes: list[str] | None = None,
 ) -> list[dict]:
-    """Siembra histórico SOLO a los símbolos por debajo de `min_bars` velas 1h.
+    """Seed history ONLY for symbols below `min_bars` 1h candles.
 
-    Idempotente: monedas ya sembradas se saltan (deploy rápido). Pensado para que,
-    al añadir monedas nuevas al núcleo, el deploy las backfillee automáticamente sin
-    que queden 'oscuras' (build_ctx live exige ≥300 velas 1h; usa tail 1500).
+    Idempotent: already seeded symbols are skipped (fast deploy). When new symbols
+    are added to the core, the deploy backfills them automatically so they never
+    run blind (live build_ctx needs >= 300 1h candles; it uses the last 1500).
     """
     symbols = symbols or config.symbols
     timeframes = timeframes or [config.base_timeframe, config.fast_timeframe]
@@ -75,24 +75,24 @@ def backfill_missing(
         if before >= min_bars:
             out.append({"sym": sym, "action": "skip", "bars_1h": before})
             continue
-        log.info("backfill %s (1h=%d < %d) → %d días", sym, before, min_bars, days)
+        log.info("backfill %s (1h=%d < %d) -> %d days", sym, before, min_bars, days)
         sync_symbol(sym, timeframes=timeframes, days=days)
         after = len(store.load_bars(sym, "1h"))
         out.append({"sym": sym, "action": "seed", "bars_1h_before": before, "bars_1h": after})
     seeded = [r for r in out if r["action"] == "seed"]
     db.log_event("INFO", "data.pipeline",
-                 f"backfill: {len(seeded)} sembradas de {len(symbols)} símbolos")
+                 f"backfill: {len(seeded)} seeded out of {len(symbols)} symbols")
     return out
 
 
 def _fmt_ts(ms: int | None) -> str:
     if not ms:
-        return "—"
+        return "-"
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
 
 
 def quality_report_md() -> str:
-    """Reporte de calidad legible desde la tabla de estado persistida."""
+    """Human-readable quality report from the persisted status table."""
     with db._lock:
         rows = db.get_connection().execute(
             "SELECT sym, tf, source, rows, gaps, dupes, first_ts, last_ts, updated_at"
@@ -100,12 +100,12 @@ def quality_report_md() -> str:
         ).fetchall()
 
     if not rows:
-        return "_Sin datos persistidos todavía. Corre `python -m oscilion.data sync`._"
+        return "_No persisted data yet. Run `python -m oscilion.data sync`._"
 
     lines = [
-        "# Reporte de calidad de datos",
+        "# Data quality report",
         "",
-        "| Símbolo | TF | Fuente | Filas | Huecos | Dups | Desde | Hasta |",
+        "| Symbol | TF | Source | Rows | Gaps | Dupes | From | To |",
         "|---|---|---|---:|---:|---:|---|---|",
     ]
     for r in rows:
@@ -115,6 +115,6 @@ def quality_report_md() -> str:
         )
     total = sum(r["rows"] for r in rows)
     total_gaps = sum(r["gaps"] for r in rows)
-    lines += ["", f"**Total filas:** {total:,} · **huecos:** {total_gaps} · "
+    lines += ["", f"**Total rows:** {total:,} | **gaps:** {total_gaps} | "
               f"**series:** {len(rows)}"]
     return "\n".join(lines)

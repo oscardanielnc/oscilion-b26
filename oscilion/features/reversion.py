@@ -1,22 +1,22 @@
-"""Medidas de calidad de reversión a la media (Fase 3).
+"""Mean-reversion quality measures.
 
-Sobre una serie de precios (se usa log-precio internamente donde aplica):
-  • hurst        — exponente de Hurst. H<0.5 ⇒ anti-persistente (revierte).
-  • ou_half_life — vida media de un proceso Ornstein-Uhlenbeck (AR1). Barras
-                   hasta cerrar la mitad de una desviación. Útil = ni muy
-                   corta (ruido) ni muy larga (deriva).
-  • variance_ratio (Lo-MacKinlay) — VR<1 ⇒ reversión, VR>1 ⇒ momentum.
-  • adf          — Dickey-Fuller aumentado. Estadístico muy negativo ⇒
-                   estacionaria (revierte). p-valor exacto si hay statsmodels.
+On a price series (log price is used internally where it applies):
+  - hurst:          Hurst exponent. H < 0.5 => anti-persistent (reverts).
+  - ou_half_life:   half-life of an Ornstein-Uhlenbeck process (AR1): bars to
+                    close half of a deviation. Useful = neither too short
+                    (noise) nor too long (drift).
+  - variance_ratio: Lo-MacKinlay. VR < 1 => reversion, VR > 1 => momentum.
+  - adf:            augmented Dickey-Fuller. A very negative statistic =>
+                    stationary (reverts). Exact p-value if statsmodels exists.
 
-Todo es defensivo: con datos insuficientes devuelve NaN, nunca explota.
-Sin dependencias duras de statsmodels (se usa si está disponible).
+Everything is defensive: with insufficient data it returns NaN, never raises.
+statsmodels is a soft dependency (used when available).
 """
 from __future__ import annotations
 
 import numpy as np
 
-# valores críticos ADF (constante, sin tendencia) — MacKinnon aprox.
+# ADF critical values (constant, no trend), MacKinnon approximation
 _ADF_CRIT = {"1%": -3.43, "5%": -2.86, "10%": -2.57}
 
 
@@ -26,7 +26,7 @@ def _as_array(series) -> np.ndarray:
 
 
 def _ols(y: np.ndarray, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """OLS por mínimos cuadrados. Devuelve (coef, se) con se robusto a singular."""
+    """Least-squares OLS. Returns (coef, se); se is NaN if X'X is singular."""
     beta, _res, _rank, _sv = np.linalg.lstsq(X, y, rcond=None)
     resid = y - X @ beta
     dof = max(len(y) - X.shape[1], 1)
@@ -40,7 +40,7 @@ def _ols(y: np.ndarray, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def hurst(series, min_lag: int = 2, max_lag: int = 40) -> float:
-    """Exponente de Hurst por dispersión de diferencias retardadas."""
+    """Hurst exponent from the dispersion of lagged differences."""
     p = _as_array(series)
     p = np.log(p) if (p > 0).all() else p
     if len(p) < max_lag * 2:
@@ -61,7 +61,7 @@ def hurst(series, min_lag: int = 2, max_lag: int = 40) -> float:
 
 
 def ou_half_life(series) -> float:
-    """Vida media OU vía AR(1): Δp_t = a + b·p_{t-1}. half_life = -ln2/b."""
+    """OU half-life via AR(1): dp_t = a + b * p_{t-1}. half_life = -ln2 / b."""
     p = _as_array(series)
     if len(p) < 10:
         return np.nan
@@ -71,12 +71,12 @@ def ou_half_life(series) -> float:
     beta, _ = _ols(y, X)
     b = beta[1]
     if b >= 0 or not np.isfinite(b):
-        return np.nan  # no hay reversión (deriva o explosivo)
+        return np.nan  # no reversion (drift or explosive)
     return float(-np.log(2) / b)
 
 
 def variance_ratio(series, k: int = 4) -> float:
-    """Variance ratio Lo-MacKinlay (insesgado). VR<1 ⇒ reversión."""
+    """Lo-MacKinlay variance ratio (unbiased). VR < 1 => reversion."""
     p = _as_array(series)
     p = np.log(p) if (p > 0).all() else p
     r = np.diff(p)
@@ -87,23 +87,22 @@ def variance_ratio(series, k: int = 4) -> float:
     var1 = np.sum((r - mu) ** 2) / (n - 1)
     if var1 == 0:
         return np.nan
-    rk = np.convolve(r, np.ones(k), mode="valid")  # sumas de k retornos
+    rk = np.convolve(r, np.ones(k), mode="valid")  # sums of k returns
     m = k * (n - k + 1) * (1 - k / n)
     vark = np.sum((rk - k * mu) ** 2) / m if m > 0 else np.nan
     return float(vark / var1)
 
 
 def adf(series, max_lag: int = 1) -> dict:
-    """Dickey-Fuller aumentado (const, sin tendencia).
+    """Augmented Dickey-Fuller (constant, no trend).
 
-    Devuelve {stat, pvalue, is_stationary, crit}. p-valor exacto si hay
-    statsmodels; si no, se decide por valor crítico al 5%.
+    Returns {stat, pvalue, is_stationary, crit}. Exact p-value if statsmodels is
+    available; otherwise decides with the 5% critical value.
     """
     p = _as_array(series)
     if len(p) < 3 * (max_lag + 2):
         return {"stat": np.nan, "pvalue": np.nan, "is_stationary": False, "crit": _ADF_CRIT}
 
-    # intento preciso con statsmodels
     try:
         from statsmodels.tsa.stattools import adfuller
 
@@ -113,7 +112,7 @@ def adf(series, max_lag: int = 1) -> dict:
     except Exception:
         pass
 
-    # fallback numpy: Δy = a + b·y_{t-1} + Σ γ_i Δy_{t-i}
+    # numpy fallback: dy = a + b * y_{t-1} + sum(gamma_i * dy_{t-i})
     dy = np.diff(p)
     y_lag = p[:-1]
     cols = [np.ones_like(y_lag), y_lag]
@@ -133,15 +132,15 @@ def adf(series, max_lag: int = 1) -> dict:
 
 
 def reversion_summary(series) -> dict:
-    """Resumen + score 0..1 de aptitud para reversión (mayor = mejor)."""
+    """Summary + 0..1 score of suitability for reversion (higher = better)."""
     h = hurst(series)
     hl = ou_half_life(series)
     vr = variance_ratio(series, 4)
     adf_r = adf(series, max_lag=1)
 
-    # señales normalizadas a [0,1] (cada una premia reversión)
-    s_h = _clamp01((0.5 - h) / 0.3) if np.isfinite(h) else 0.0          # H<0.5 bueno
-    s_vr = _clamp01((1.0 - vr) / 0.4) if np.isfinite(vr) else 0.0        # VR<1 bueno
+    # signals normalized to [0, 1], each one rewards reversion
+    s_h = _clamp01((0.5 - h) / 0.3) if np.isfinite(h) else 0.0
+    s_vr = _clamp01((1.0 - vr) / 0.4) if np.isfinite(vr) else 0.0
     s_adf = 1.0 if adf_r["is_stationary"] else 0.0
     s_hl = _half_life_score(hl)
 
@@ -156,11 +155,11 @@ def _clamp01(x: float) -> float:
 
 
 def _half_life_score(hl: float, lo: float = 4, hi: float = 96) -> float:
-    """Premia vidas medias en banda útil [lo,hi] barras; castiga extremos."""
+    """Reward half-lives inside the useful [lo, hi] bar band; punish extremes."""
     if not np.isfinite(hl) or hl <= 0:
         return 0.0
     if lo <= hl <= hi:
         return 1.0
     if hl < lo:
         return _clamp01(hl / lo)
-    return _clamp01(hi / hl)  # demasiado lenta ⇒ deriva
+    return _clamp01(hi / hl)  # too slow => drift
