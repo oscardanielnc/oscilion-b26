@@ -1,8 +1,8 @@
-"""Construcción del contexto multi-TF para evaluar estrategias.
+"""Builds the multi-TF context used to evaluate strategies.
 
-Misma función para backtest (historia completa) y live (últimas velas cerradas):
-lee del store, resamplea 1h→TF de señal y auxiliares, precomputa indicadores.
-Sin look-ahead: resample descarta el bucket incompleto.
+Same function for backtest (full history) and live (latest closed candles): reads
+from the store, resamples 1h -> signal TF and auxiliary TFs, precomputes indicators.
+No look-ahead: resampling drops the incomplete bucket.
 """
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ def tf_arrays(df: pd.DataFrame) -> S.TFArrays:
 
 
 def build_ctx(sym: str, strategy: str, *, tail_1h: int | None = None) -> S.Ctx | None:
-    """Contexto para `sym`+`strategy`. `tail_1h` limita las velas 1h cargadas
-    (None=todo, para backtest; p.ej. 1200 para live = eficiente)."""
+    """Context for `sym` + `strategy`. `tail_1h` limits the 1h candles loaded
+    (None = everything, for backtests; e.g. 1200 for live, which is cheaper)."""
     spec = S.REGISTRY[strategy]
     h1 = store.load_bars(sym, "1h")
     if h1.empty or len(h1) < 300:

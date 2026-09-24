@@ -1,13 +1,14 @@
-"""Motor de análisis — ensambla features → scoring → riesgo (Fase 3).
+"""Analysis engine: features -> scoring -> risk for the range-reversion strategy.
 
-`analyze(sym)`  → candidato con rango, stop anti-barridas, TP (borde opuesto),
-                  RR, apalancamiento y si es operable (RR ≥ min_rr).
-`rank(symbols, capital)` → ranking de candidatos con % de capital asignado
-                  (allocation con correlación) — el ENTREGABLE de la Fase 3.
+`analyze(sym)`            -> candidate with range, anti-sweep stop, TP (opposite
+                             edge), RR, leverage and whether it is tradeable
+                             (RR >= min_rr).
+`rank(symbols, capital)`  -> ranking of candidates with the % of capital
+                             allocated (correlation-aware allocation).
 
-Estrategia base: entrar cerca de un borde del rango, salir en el opuesto;
-el stop va más allá del clúster + ATR. Si el borde opuesto no da RR ≥ 2.5,
-ese día NO se opera esa moneda (filtro, no preferencia).
+Base strategy: enter near one edge of the range, exit at the opposite one; the
+stop goes beyond the liquidity cluster + ATR. If the opposite edge does not give
+RR >= 2.5, that coin is NOT traded that day (a filter, not a preference).
 """
 from __future__ import annotations
 
@@ -26,23 +27,23 @@ log = logging.getLogger(__name__)
 
 
 def candidate_from_df(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96) -> dict:
-    """Candidato a partir de un DataFrame de velas cerradas (fuente única de
-    la lógica de señal). Lo usan tanto `analyze` (live) como el backtest
-    (sobre ventanas, sin look-ahead). Sin asignación de capital aún.
+    """Candidate from a DataFrame of closed candles (single source of the signal
+    logic). Used by both `analyze` (live) and the backtest (on rolling windows,
+    no look-ahead). No capital allocation yet.
     """
     base = {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0, "side": None}
 
     if df.empty or len(df) < 40:
-        return {**base, "reason": "sin datos suficientes"}
+        return {**base, "reason": "not enough data"}
 
     conv = conviction(df, lookback)
     side = conv["side"]
     if side is None or conv["score"] <= 0:
-        return {**base, **_conv_view(conv), "reason": conv.get("reason", "sin borde claro")}
+        return {**base, **_conv_view(conv), "reason": conv.get("reason", "no clear edge")}
 
     entry = conv["last"]
     lo, hi = conv["lo"], conv["hi"]
-    # TP = borde opuesto del rango (objetivo natural de la reversión)
+    # TP = opposite edge of the range (the natural target of the reversion)
     tp = hi if side == "long" else lo
 
     st = stops.safe_stop(df, side, entry, range_lo=lo, range_hi=hi)
@@ -64,11 +65,11 @@ def candidate_from_df(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96
 
 def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 96,
                        buffer_atr: float = 0.5) -> dict:
-    """Señal de MOMENTUM/breakout (probe contrarian a la reversión).
+    """MOMENTUM/breakout signal (the contrarian probe to reversion).
 
-    Entra cuando el precio ROMPE un borde del rango (continuación), con stop de
-    vuelta dentro del rango (anti-fakeout + ATR) y TP por proyección del ancho
-    del rango (measured move). Misma forma de salida que `candidate_from_df`.
+    Enters when price BREAKS a range edge (continuation), with the stop back inside
+    the range (anti-fakeout + ATR) and the TP at the projected range width
+    (measured move). Same output shape as `candidate_from_df`.
     """
     from oscilion.features import indicators as ind
     from oscilion.features import ranges as rng
@@ -76,28 +77,28 @@ def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 9
 
     base = {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0, "side": None}
     if df.empty or len(df) < 40:
-        return {**base, "reason": "sin datos suficientes"}
+        return {**base, "reason": "not enough data"}
 
     hz = rng.horizontal_range(df, lookback)
     lo, hi, mid, width = hz["lo"], hz["hi"], hz["mid"], None
     if not (np.isfinite(lo) and np.isfinite(hi) and hi > lo):
-        return {**base, "reason": "rango no definido"}
+        return {**base, "reason": "range not defined"}
     width = hi - lo
     last = float(df["close"].iloc[-1])
     atr = float(ind.atr(df).iloc[-1])
     if not np.isfinite(atr) or atr <= 0:
-        return {**base, "reason": "atr inválido"}
+        return {**base, "reason": "invalid ATR"}
     reg = rg.classify_regime(df, lookback)
     regime, vol_regime = reg.regime, reg.vol_regime
 
-    if last > hi:                       # ruptura alcista → long de continuación
+    if last > hi:                       # bullish breakout -> continuation long
         side, entry, stop, tp = "long", last, hi - buffer_atr * atr, last + width
         brk = (last - hi) / atr
-    elif last < lo:                     # ruptura bajista → short de continuación
+    elif last < lo:                     # bearish breakout -> continuation short
         side, entry, stop, tp = "short", last, lo + buffer_atr * atr, last - width
         brk = (lo - last) / atr
     else:
-        return {**base, "reason": "sin ruptura"}
+        return {**base, "reason": "no breakout"}
 
     math = sizing.compute(side, entry, stop, tp)
     score = max(0.0, min(100.0, 40 + 60 * min(1.0, brk)))
@@ -114,12 +115,12 @@ def breakout_candidate(sym: str, df: pd.DataFrame, *, tf: str, lookback: int = 9
 
 
 def analyze(sym: str, *, tf: str | None = None, lookback: int = 96) -> dict:
-    """Candidato completo para un símbolo cargando su histórico (live)."""
+    """Full candidate for a symbol, loading its history (live)."""
     tf = tf or config.base_timeframe
     df = store.load_bars(sym, tf)
     if df.empty or len(df) < 40:
         return {"sym": sym, "tf": tf, "tradeable": False, "score": 0.0,
-                "side": None, "reason": "sin datos suficientes"}
+                "side": None, "reason": "not enough data"}
     return candidate_from_df(sym, df, tf=tf, lookback=lookback)
 
 
@@ -129,7 +130,7 @@ def _conv_view(conv: dict) -> dict:
 
 
 def _correlations(symbols: list[str], tf: str, lookback: int = 240) -> dict:
-    """Correlación de retornos entre símbolos (para el haircut de allocation)."""
+    """Return correlation between symbols (for the allocation haircut)."""
     closes = {}
     for s in symbols:
         df = store.load_bars(s, tf)
@@ -151,7 +152,7 @@ def _correlations(symbols: list[str], tf: str, lookback: int = 240) -> dict:
 
 def rank(symbols: list[str] | None = None, capital: float = 10_000.0, *,
          tf: str | None = None, persist: bool = True) -> list[dict]:
-    """Ranking de candidatos con % de capital. Entregable de la Fase 3."""
+    """Ranking of candidates with the % of capital allocated."""
     symbols = symbols or config.symbols
     tf = tf or config.base_timeframe
 
@@ -160,7 +161,6 @@ def rank(symbols: list[str] | None = None, capital: float = 10_000.0, *,
     corr = _correlations(symbols, tf)
     allocated = allocation.allocate(tradeable, capital, corr=corr)
 
-    # adjuntar sizing por candidato asignado
     by_sym = {c["sym"]: c for c in allocated}
     for c in candidates:
         a = by_sym.get(c["sym"])
@@ -182,7 +182,7 @@ def _persist(candidates: list[dict], allocated: list[dict]) -> None:
     chosen = {c["sym"] for c in allocated}
     for c in candidates:
         if not c.get("side"):
-            db.log_decision(c["sym"], "no-operar", c.get("reason", "sin borde"))
+            db.log_decision(c["sym"], "no-trade", c.get("reason", "no edge"))
             continue
         pid = db.log_prediction(
             c["sym"], score=c["score"], range_lo=c.get("lo"), range_hi=c.get("hi"),
@@ -190,29 +190,29 @@ def _persist(candidates: list[dict], allocated: list[dict]) -> None:
             rr=c.get("rr"), leverage=c.get("leverage"), components=c.get("components"),
         )
         if c["sym"] in chosen:
-            db.log_decision(c["sym"], "entrar",
+            db.log_decision(c["sym"], "enter",
                             f"score={c['score']} rr={c.get('rr'):.2f} w={c.get('weight'):.2%}",
                             prediction_id=pid)
         elif not c.get("tradeable"):
-            db.log_decision(c["sym"], "no-operar",
+            db.log_decision(c["sym"], "no-trade",
                             f"rr={c.get('rr', 0):.2f} < {config.min_rr}", prediction_id=pid)
         else:
-            db.log_decision(c["sym"], "esperar", "no entró en cartera", prediction_id=pid)
+            db.log_decision(c["sym"], "wait", "not selected for the portfolio", prediction_id=pid)
 
 
 def format_ranking(candidates: list[dict]) -> str:
-    """Tabla legible del ranking (CLI / logs)."""
-    h = (f"{'SÍMBOLO':<16}{'SCORE':>6} {'SIDE':<6}{'REG':<7}"
-         f"{'RR':>5}{'L':>6}{'STOP%':>7}{'TP%':>7}{'%CAP':>7}  RANGO")
+    """Human-readable ranking table (CLI / logs)."""
+    h = (f"{'SYMBOL':<16}{'SCORE':>6} {'SIDE':<6}{'REG':<7}"
+         f"{'RR':>5}{'L':>6}{'STOP%':>7}{'TP%':>7}{'%CAP':>7}  RANGE")
     lines = [h, "-" * len(h)]
     for c in candidates:
         if not c.get("side"):
-            lines.append(f"{c['sym']:<16}{c.get('score',0):>6.1f} {'—':<6}"
-                         f"{str(c.get('regime','?'))[:6]:<7}{'—':>5}{'—':>6}"
-                         f"{'—':>7}{'—':>7}{'—':>7}  {c.get('reason','')}")
+            lines.append(f"{c['sym']:<16}{c.get('score',0):>6.1f} {'-':<6}"
+                         f"{str(c.get('regime','?'))[:6]:<7}{'-':>5}{'-':>6}"
+                         f"{'-':>7}{'-':>7}{'-':>7}  {c.get('reason','')}")
             continue
         w = c.get("weight")
-        rng_s = f"[{c['lo']:.4g} – {c['hi']:.4g}] pos={c['position']:.2f}"
+        rng_s = f"[{c['lo']:.4g} - {c['hi']:.4g}] pos={c['position']:.2f}"
         lines.append(
             f"{c['sym']:<16}{c['score']:>6.1f} {c['side']:<6}{c['regime'][:6]:<7}"
             f"{c['rr']:>5.2f}{c['leverage']:>6.2f}{c['stop_pct']*100:>6.2f}%"
@@ -228,7 +228,7 @@ def main() -> None:
     from oscilion.logging_setup import setup_logging
 
     setup_logging()
-    p = argparse.ArgumentParser(prog="oscilion.analysis", description="ranking de candidatos")
+    p = argparse.ArgumentParser(prog="oscilion.analysis", description="candidate ranking")
     p.add_argument("--capital", type=float, default=10_000.0)
     p.add_argument("--symbols", type=str, default="")
     p.add_argument("--tf", type=str, default=config.base_timeframe)

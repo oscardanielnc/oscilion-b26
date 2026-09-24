@@ -1,11 +1,11 @@
-"""Estrategias portadas del proyecto BTC/Sentinel (Fase de pruebas R2/R3).
+"""Directional strategies ported from an earlier research project (Sentinel).
 
-Funciones puras de señal: dado un contexto con arrays precomputados por TF y un
-índice de barra de señal `i`, devuelven un candidato {side, entry_ref, stop, tp}
-usando SOLO información ≤ cierre de la barra i (sin look-ahead).
+Pure signal functions: given a context with precomputed per-TF arrays and a
+signal bar index `i`, they return a candidate {side, entry_ref, stop, tp} using
+ONLY information <= the close of bar i (no look-ahead).
 
-Multi-TF: `ctx.sig` es el TF de señal; `ctx.aux[h]` son otros TF (1h/4h) ya
-cerrados; `aux_at(ctx,h,T)` da el índice del aux más reciente cerrado ≤ T.
+Multi-TF: `ctx.sig` is the signal TF; `ctx.aux[h]` are other, already closed TFs
+(1h/4h); `aux_at(ctx, h, T)` gives the index of the latest aux bar closed <= T.
 """
 from __future__ import annotations
 
@@ -40,15 +40,15 @@ class Ctx:
 
 
 def tp_barrier(tp: float | None, side: str) -> float:
-    """Nivel de TP para chequeos hi/lo. tp=None = runner (sin TP): devuelve ±inf,
-    que NUNCA dispara — nada de centinelas 1e18 que contaminan sizing/logs."""
+    """TP level for hi/lo checks. tp=None = runner (no TP): returns +/-inf, which
+    NEVER fires (no 1e18 sentinels polluting sizing/logs)."""
     if tp is None:
         return float("inf") if side == "long" else float("-inf")
     return float(tp)
 
 
 def aux_at(ctx: Ctx, h: int, T: int) -> int | None:
-    """Índice del bar de TF `h` ya CERRADO en el instante T (close ≤ T)."""
+    """Index of the TF `h` bar already CLOSED at instant T (close <= T)."""
     a = ctx.aux.get(h)
     if a is None:
         return None
@@ -141,11 +141,11 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
     rng = p.get("range_bars", 6)
     if i < rng + 2 or not np.isfinite(s.atr[i]) or s.atr[i] <= 0:
         return None
-    hi = float(np.max(s.high[i - rng: i]))       # rango de las `rng` velas previas
+    hi = float(np.max(s.high[i - rng: i]))       # range of the previous `rng` candles
     lo = float(np.min(s.low[i - rng: i]))
     price = float(s.close[i])
     mid = (hi + lo) / 2
-    if mid <= 0 or (hi - lo) / mid > p.get("range_max_pct", 0.015):   # C2 rango estrecho
+    if mid <= 0 or (hi - lo) / mid > p.get("range_max_pct", 0.015):   # C2 narrow range
         return None
     if price > hi:
         side = "long"
@@ -156,7 +156,7 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
     if p.get("long_only", False) and side == "short":
         return None
     T = int(s.ts[i]) + ctx.sig_tf_h * _H
-    # C3: EMA50 4h alineado
+    # C3: 4h EMA50 aligned
     k = aux_at(ctx, 4, T)
     if k is None or not np.isfinite(ctx.aux[4].ema50[k]):
         return None
@@ -164,19 +164,19 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     if side == "short" and not (price < ctx.aux[4].ema50[k]):
         return None
-    # O1 gate de frescura (EMA9/21 1h aún no alineado con la dirección)
+    # O1 freshness gate (1h EMA9/21 not yet aligned with the direction)
     if p.get("fresh_gate", True):
         aligned = (s.ema9[i] > s.ema21[i]) if side == "long" else (s.ema9[i] < s.ema21[i])
         if aligned:
             return None
-    # session EU/NY: cierre UTC en [8,21)
+    # EU/NY session: UTC close in [8, 21)
     if p.get("session_filter", True):
         if not (8 <= (T // _H) % 24 < 21):
             return None
     atr = s.atr[i]
     if side == "long":
         stop = lo - p.get("sl_atr_buf", 0.5) * atr
-        stop = min(stop, price - 1.0 * atr)      # mínimo 1xATR de riesgo
+        stop = min(stop, price - 1.0 * atr)      # at least 1x ATR of risk
     else:
         stop = hi + p.get("sl_atr_buf", 0.5) * atr
         stop = max(stop, price + 1.0 * atr)
@@ -185,7 +185,7 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     tp_r = p.get("tp_r", 4.0)
     if tp_r <= 0:
-        tp = None                                 # runner: sin TP (corre hasta SL/timeout)
+        tp = None                                 # runner: no TP (runs until SL/timeout)
     else:
         tp = float(price + tp_r * risk if side == "long" else price - tp_r * risk)
     return {"side": side, "entry_ref": price, "stop": float(stop), "tp": tp}
@@ -193,13 +193,14 @@ def orb_breakout(ctx: Ctx, i: int, p: dict) -> dict | None:
 
 # ------------------------------- VWAP ANCHOR ---------------------------------
 def vwap_anchor(ctx: Ctx, i: int, p: dict) -> dict | None:
-    """VWAP Anchor v2 (portado de sentinel) — régimen VWAP multi-TF, LONG-only.
+    """VWAP Anchor v2 (ported from Sentinel): multi-TF VWAP regime, LONG-only.
 
-    Gate de ENTRADA (lo que decide disparar): C1 ∧ C2 ∧ O1_gate.
-      C1: precio > VWAP 1h (24 barras)   C2: precio > VWAP 4h (24 barras)
-      O1: frescura — skip si EMA9_1h > EMA21_1h (ya confirmó, entrada tardía)
-    C3 (price > EMA50 4h) es opcional (trend_filter): en v2 sólo subía 'stars', no gateaba.
-    SL = sl_atr_mult · ATR 1h. TP = tp_r · riesgo (v2: 2.0/2.5).
+    ENTRY gate (what decides to fire): C1 and C2 and O1_gate.
+      C1: price > 1h VWAP (24 bars)   C2: price > 4h VWAP (24 bars)
+      O1: freshness, skip if EMA9_1h > EMA21_1h (already confirmed, late entry)
+    C3 (price > 4h EMA50) is optional (trend_filter): in v2 it only raised the
+    rating, it did not gate.
+    SL = sl_atr_mult * 1h ATR. TP = tp_r * risk (v2: 2.0/2.5).
     """
     s = ctx.sig                                  # 1h
     if i < 30 or not np.isfinite(s.atr[i]) or s.atr[i] <= 0 or not np.isfinite(s.vwap[i]):
@@ -208,18 +209,18 @@ def vwap_anchor(ctx: Ctx, i: int, p: dict) -> dict | None:
     if not (price > s.vwap[i]):                  # C1
         return None
     T = int(s.ts[i]) + ctx.sig_tf_h * _H
-    k = aux_at(ctx, 4, T)                         # 4h cerrado ≤ T
+    k = aux_at(ctx, 4, T)                         # 4h bar closed <= T
     if k is None or not np.isfinite(ctx.aux[4].vwap[k]):
         return None
     if not (price > ctx.aux[4].vwap[k]):         # C2
         return None
     if p.get("fresh_gate", True) and s.ema9[i] > s.ema21[i]:   # O1_gate
         return None
-    if p.get("trend_filter", False):             # C3 opcional
+    if p.get("trend_filter", False):             # optional C3
         e50 = ctx.aux[4].ema50[k]
         if not np.isfinite(e50) or not (price > e50):
             return None
-    if p.get("session_filter", False):           # v2 no usa sesión (off por defecto)
+    if p.get("session_filter", False):           # v2 has no session filter (off by default)
         if (T // _H) % 24 not in (8, 12, 16, 20):
             return None
     atr = s.atr[i]
@@ -228,7 +229,7 @@ def vwap_anchor(ctx: Ctx, i: int, p: dict) -> dict | None:
     if risk <= 0:
         return None
     tp_r = p.get("tp_r", 2.5)
-    tp = float(price + tp_r * risk) if tp_r > 0 else None  # None = runner (sin TP)
+    tp = float(price + tp_r * risk) if tp_r > 0 else None  # None = runner (no TP)
     return {"side": "long", "entry_ref": price, "stop": float(stop), "tp": tp}
 
 
@@ -248,7 +249,7 @@ def break_retest(ctx: Ctx, i: int, p: dict) -> dict | None:
     atr = s.atr[i]
     base_vol = float(np.median(pre_vol))
     vol_ratio = float(np.mean(bo_vol) / base_vol) if base_vol > 0 else 99.0
-    if vol_ratio >= p.get("vol_max_ratio", 1.0):        # Gate A: solo stealth (bajo vol)
+    if vol_ratio >= p.get("vol_max_ratio", 1.0):        # Gate A: stealth only (low volume)
         return None
     zone = p.get("retest_half_atr", 0.3) * atr
     side = level = None
@@ -260,7 +261,7 @@ def break_retest(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     if p.get("long_only", False) and side == "short":
         return None
-    if p.get("trend_filter", True):                      # C4: EMA50 4h alineado
+    if p.get("trend_filter", True):                      # C4: 4h EMA50 aligned
         if side == "long" and not (price > s.ema50[i]):
             return None
         if side == "short" and not (price < s.ema50[i]):
@@ -271,7 +272,7 @@ def break_retest(ctx: Ctx, i: int, p: dict) -> dict | None:
         return None
     tp_r = p.get("tp_r", 4.0)
     if tp_r <= 0:
-        tp = None                                 # runner: sin TP
+        tp = None                                 # runner: no TP
     else:
         tp = float(price + tp_r * risk if side == "long" else price - tp_r * risk)
     return {"side": side, "entry_ref": price, "stop": float(stop), "tp": tp}

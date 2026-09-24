@@ -321,7 +321,7 @@ class LiveMonitor:
         risk_amt = self.capital * config.risk_per_trade
         notional = risk_amt / stop_pct
         entry_fee = DEFAULT_COSTS.fee(notional, maker=False)
-        pid = db.log_prediction(sym, score=(80 if a.conviction == "alta" else 60),
+        pid = db.log_prediction(sym, score=(80 if a.conviction == "high" else 60),
                                 stop=stop, tp=tp,
                                 components={"strategy": a.strategy, "side": side,
                                             "observe": observe})

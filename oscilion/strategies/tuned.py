@@ -1,20 +1,21 @@
-# GENERADO/curado tras la auditoría 2026-06-22 (purged-WF + barrido de universo +
-# validación 15m anti-beta de alts). Esquema validado en Fase B: equal-weight,
-# maxc=3, clúster=2 (tunear pesos por moneda sobreajusta en muestras chicas).
-# Solo combos CON capital van aquí (observe nunca recibe capital ni pasa el límite).
+# Generated/curated after the 2026-06-22 audit (purged walk-forward + universe sweep
+# + 15m anti-beta validation of alts). Scheme validated in phase B: equal weight,
+# maxc=3, cluster=2 (tuning per-coin weights overfits on small samples).
+# Only combos WITH capital go here (observe combos never get capital nor count
+# against the limit).
 #
-# Clústeres = control de correlación para "máx N por clúster". Con 17 combos y solo 3
-# posiciones concurrentes, separar por familia FUERZA diversificación (no 3 del mismo tipo):
-#   trx      → 4 estrategias sobre TRX (el veto por símbolo ya deja 1 viva).
-#   altlong  → largos sesgados (orb/vwap mean-rev) en alts mayores correlacionados.
-#   altbreak → break_retest bidireccional en alts (gana por el lado SHORT en caídas;
-#              anti-correlacionado con los largos → gran diversificador).
-#   gold     → oro, descorrelacionado del cripto.
+# Clusters = correlation control for "max N per cluster". With 17 combos and only 3
+# concurrent positions, splitting by family FORCES diversification (not 3 of a kind):
+#   trx      -> 4 strategies on TRX (the per-symbol veto already leaves one alive).
+#   altlong  -> long-biased (orb/vwap mean-rev) on correlated major alts.
+#   altbreak -> two-sided break_retest on alts (wins on the SHORT side in drops;
+#               anti-correlated with the longs -> a strong diversifier).
+#   gold     -> gold, uncorrelated with crypto.
 
-# DEMOTE 06-29: toda la familia vwap_anchor (largo-only de continuación) salió de
-# capital → observe. En vivo sangró −11R comprando trampas alcistas en alts cayendo,
-# sin gate de régimen. Vuelve a capital sólo si prueba forward positivo con el filtro
-# de régimen de mercado puesto. Capital cae de 17 → 12 combos.
+# DEMOTE 06-29: the whole vwap_anchor family (long-only continuation) moved from
+# capital to observe. Live, it bled -11R buying bull traps on falling alts with no
+# regime gate. It returns to capital only if it proves a positive forward with the
+# market regime filter on. Capital combos drop from 17 to 12.
 WEIGHTS = {
     'TRX/USDT:USDT|ema_trend_stack': 1.0,
     'TRX/USDT:USDT|orb_breakout': 1.0,
@@ -45,7 +46,8 @@ CLUSTERS = {
     'XAU/USDT:USDT|momentum_pullback': 'gold',
 }
 
-# max_concurrent 3→4 (research/concurrency_sweep.py, 2026-06-22): con 17 combos el tope
-# de 3 era el cuello de botella. 4 DOMINA a 3 en OOS — más throughput, mejor Sharpe
-# (1.78 vs 1.18) Y menor MaxDD (-61% vs -70%). Más de 4 baja Sharpe y sube DD.
+# max_concurrent 3 -> 4 (research/concurrency_sweep.py, 2026-06-22): with 17 combos the
+# cap of 3 was the bottleneck. 4 DOMINATED 3 in that backtest OOS: more throughput,
+# better Sharpe (1.78 vs 1.18) AND lower MaxDD (-61% vs -70%). Above 4, Sharpe drops
+# and DD rises.
 LIMITS = {'max_concurrent': 4, 'max_per_cluster': 2}

@@ -1,21 +1,15 @@
-"""Capa de cartera (Fase B) — SCAFFOLD listo para afinar.
+"""Portfolio layer: weights, correlation clusters and hard limits per combo.
 
-Responde (se validará con muchas pruebas, ver docs/B_PORTFOLIO_PLAN.md):
-  • cuánto capital a cada moneda×estrategia (weights),
-  • qué multiplicador de apalancamiento sobre el capital asignado,
-  • mapa de correlaciones para no apostar varias veces a lo mismo,
-  • límites duros (máx. concurrentes, exposición total).
+Answers (see docs/B_PORTFOLIO_PLAN.md):
+  - how much capital each coin x strategy combo gets (weights),
+  - the correlation map, so the same bet is not placed several times,
+  - hard limits (max concurrent positions, max per cluster).
 
-⚠️ v1 = equal-weight provisional. NADA aquí es definitivo hasta validarlo con el
-motor honesto + forward. No introducir supuestos sin evidencia.
+The tuned values live in `tuned.py` (produced by research/phase_b.py). Without
+it, the baseline is equal weight with no clusters.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from oscilion.strategies.assignment import all_assignments
-
-# Config afinada en Fase B (generada por research/phase_b.py). Si no existe, baseline.
 try:
     from oscilion.strategies import tuned as _t
     WEIGHTS: dict = dict(_t.WEIGHTS)
@@ -27,9 +21,6 @@ except Exception:
     WEIGHTS, CLUSTERS = {}, {}
     MAX_CONCURRENT, MAX_PER_CLUSTER = 3, 2
     _TUNED = False
-
-MAX_TOTAL_EXPOSURE = 1.0      # fracción máx. del capital desplegada a la vez
-DEFAULT_LEVERAGE = 1.0        # multiplicador sobre capital asignado (B: sin extra v1)
 
 
 def key(sym: str, strategy: str) -> str:
@@ -43,7 +34,7 @@ def _is_observe_only(sym: str, strategy: str) -> bool:
 
 def weight_of(sym: str, strategy: str) -> float:
     if _is_observe_only(sym, strategy):
-        return 0.0                       # forward-test: nunca recibe capital
+        return 0.0                       # forward test: never receives capital
     return WEIGHTS.get(key(sym, strategy), 1.0)
 
 
@@ -52,38 +43,11 @@ def cluster_of(sym: str, strategy: str) -> str:
 
 
 def regime_exempt(sym: str, strategy: str) -> bool:
-    """True si el combo NO debe llevar el filtro de régimen de mercado (beta de BTC):
-    el oro (descorrelacionado, por SÍMBOLO) y las estrategias ANTI-BETA (break_retest,
-    que gana por shorts en alts que caen independientes de BTC). FUENTE ÚNICA — la usan
-    el monitor live, forward.refresh y research para no divergir (auditoría 06-29)."""
+    """True if the combo must NOT carry the market regime filter (BTC beta): gold
+    (uncorrelated, per SYMBOL) and the ANTI-BETA strategies (break_retest, which wins
+    by shorting alts that fall independently of BTC). SINGLE SOURCE, used by the live
+    monitor, forward.refresh and research so they cannot diverge (audit 06-29)."""
     from config import config
     return (sym in config.regime_exempt_symbols
             or cluster_of(sym, strategy) == "gold"
             or strategy in config.regime_exempt_strategies)
-
-
-@dataclass
-class Allocation:
-    sym: str
-    strategy: str
-    weight: float             # fracción del capital
-    leverage: float           # multiplicador (B lo afinará por moneda)
-
-
-def equal_weights() -> list[Allocation]:
-    """Asignación provisional v1: capital igual entre las series del portfolio.
-    B reemplazará esto por weights ∝ f(edge medido, 1/vol, correlación, Kelly fracc.)."""
-    items = [(s, a) for s, a in all_assignments() if not a.observe_only]
-    n = len(items) or 1
-    w = 1.0 / n
-    return [Allocation(sym, a.strategy, w, DEFAULT_LEVERAGE) for sym, a in items]
-
-
-# ---------------------------------------------------------------------------
-# TODO (Fase B — ver docs/B_PORTFOLIO_PLAN.md):
-#   - weights por edge medido (exp_R) × 1/vol × haircut de correlación + Kelly fracc.
-#   - leverage por moneda según distancia de stop y régimen de vol.
-#   - correlation_map(): agrupar monedas muy correlacionadas (data/reports/correlation_map.md).
-#   - simulación de CARTERA (cuenta única, máx concurrentes, exposición) -> Sharpe/DD reales.
-#   - todo validado en el motor honesto + forward antes de fijarse.
-# ---------------------------------------------------------------------------
