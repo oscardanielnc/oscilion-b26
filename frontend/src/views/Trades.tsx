@@ -1,5 +1,5 @@
 import { Trade, Alert } from "../api";
-import { fmt, cls, timeLima } from "../util";
+import { fmt, cls, fmtTime } from "../util";
 
 const STRAT: Record<string, string> = { ema_trend_stack: "EMA stack", orb_breakout: "ORB", vwap_anchor: "VWAP anchor", break_retest: "Break+Retest" };
 
@@ -14,18 +14,18 @@ function summary(trades: Trade[]) {
   });
 }
 
-export function Operaciones({ trades, alerts }: { trades: Trade[]; alerts: Alert[] }) {
+export function Trades({ trades, alerts }: { trades: Trade[]; alerts: Alert[] }) {
   return (
     <>
-      <div className="section-title">Operaciones (dry-run · virtuales) · horas en Lima</div>
+      <div className="section-title">Trades (dry-run, virtual) | times in UTC-5</div>
 
       {trades.length === 0 ? (
-        <div className="card muted">Aún no hay operaciones cerradas. Aparecerán aquí cuando una estrategia dispare y cierre.</div>
+        <div className="card muted">No closed trades yet. They show up here once a strategy fires and closes.</div>
       ) : (
         <>
           <div className="card" style={{ marginBottom: 12 }}>
             <table>
-              <thead><tr><th>Estrategia</th><th>N</th><th>Winrate</th><th>R medio</th></tr></thead>
+              <thead><tr><th>Strategy</th><th>N</th><th>Winrate</th><th>Mean R</th></tr></thead>
               <tbody>
                 {summary(trades).map((s) => (
                   <tr key={s.strategy}>
@@ -41,20 +41,20 @@ export function Operaciones({ trades, alerts }: { trades: Trade[]; alerts: Alert
           <div className="card">
             <table>
               <thead>
-                <tr><th>Cierre (Lima)</th><th>Moneda</th><th>Estrategia</th><th>Lado</th>
-                  <th>Entrada</th><th>Salida</th><th>R</th><th>PnL</th></tr>
+                <tr><th>Close</th><th>Coin</th><th>Strategy</th><th>Side</th>
+                  <th>Entry</th><th>Exit</th><th>R</th><th>PnL</th></tr>
               </thead>
               <tbody>
                 {trades.map((t, i) => (
                   <tr key={i}>
-                    <td>{timeLima(t.exit_ts ?? t.ts)}</td>
+                    <td>{fmtTime(t.exit_ts ?? t.ts)}</td>
                     <td>{t.sym.split("/")[0]}</td>
                     <td className="muted">{STRAT[t.strategy] || t.strategy}</td>
                     <td className={t.side === "long" ? "pos" : "neg"}>{t.side === "long" ? "▲" : "▼"} {t.side}</td>
                     <td>{fmt(t.entry, 6)}</td>
                     <td>{fmt(t.exit, 6)}</td>
-                    <td className={cls(t.r_multiple)}>{t.r_multiple != null ? fmt(t.r_multiple, 2) : "—"}</td>
-                    <td className={cls(t.pnl)}>{t.pnl != null ? fmt(t.pnl, 2) : "—"}</td>
+                    <td className={cls(t.r_multiple)}>{t.r_multiple != null ? fmt(t.r_multiple, 2) : "-"}</td>
+                    <td className={cls(t.pnl)}>{t.pnl != null ? fmt(t.pnl, 2) : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -64,11 +64,11 @@ export function Operaciones({ trades, alerts }: { trades: Trade[]; alerts: Alert
       )}
 
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="section-title">Alertas recientes</div>
+        <div className="section-title">Recent alerts</div>
         <div className="alerts">
-          {alerts.length === 0 && <div className="muted small">Sin alertas todavía.</div>}
+          {alerts.length === 0 && <div className="muted small">No alerts yet.</div>}
           {alerts.map((a, i) => (
-            <div className="alert" key={i}><span className="t">{timeLima(a.ts)}</span><span>{a.msg}</span></div>
+            <div className="alert" key={i}><span className="t">{fmtTime(a.ts)}</span><span>{a.msg}</span></div>
           ))}
         </div>
       </div>

@@ -1,14 +1,22 @@
 import { useEffect, useState, useCallback } from "react";
 import { getJSON, Status, Signal, Forward, Portfolio, Alert, Trade } from "./api";
-import { Resumen } from "./views/Resumen";
-import { Senales } from "./views/Senales";
-import { Validacion } from "./views/Validacion";
-import { Operaciones } from "./views/Operaciones";
+import { fmtClock } from "./util";
+import { Overview } from "./views/Overview";
+import { Signals } from "./views/Signals";
+import { Validation } from "./views/Validation";
+import { Trades } from "./views/Trades";
 
-type Tab = "resumen" | "senales" | "operaciones" | "validacion";
+type Tab = "overview" | "signals" | "trades" | "validation";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "signals", label: "Live signals" },
+  { id: "trades", label: "Trades" },
+  { id: "validation", label: "Forward validation" },
+];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("resumen");
+  const [tab, setTab] = useState<Tab>("overview");
   const [status, setStatus] = useState<Status | null>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [forward, setForward] = useState<Forward[]>([]);
@@ -32,7 +40,7 @@ export default function App() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 20000); // refresca cada 20s
+    const id = setInterval(load, 20000);
     return () => clearInterval(id);
   }, [load]);
 
@@ -44,32 +52,31 @@ export default function App() {
       <header>
         <div className="logo">Oscil<span>ion</span></div>
         <span className={"pill " + (status ? "live" : "")}>
-          {status ? `modo ${status.mode}` : "conectando…"}
+          {status ? `mode ${status.mode}` : "connecting..."}
         </span>
         {status && <span className="pill">v{status.version}</span>}
         <div className="spacer" />
-        <span className="pill">{inTrade} en trade · {active} señal activa</span>
-        <span className="pill">{updated ? "act. " + new Date(updated).toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour12: false }) : ""}</span>
+        <span className="pill">{inTrade} in trade | {active} active signal</span>
+        <span className="pill">{updated ? "updated " + fmtClock(updated) : ""}</span>
       </header>
 
       <nav className="tabs">
-        <div className={"tab" + (tab === "resumen" ? " active" : "")} onClick={() => setTab("resumen")}>Resumen</div>
-        <div className={"tab" + (tab === "senales" ? " active" : "")} onClick={() => setTab("senales")}>Señales en vivo</div>
-        <div className={"tab" + (tab === "operaciones" ? " active" : "")} onClick={() => setTab("operaciones")}>Operaciones</div>
-        <div className={"tab" + (tab === "validacion" ? " active" : "")} onClick={() => setTab("validacion")}>Validación forward</div>
+        {TABS.map((t) => (
+          <div key={t.id} className={"tab" + (tab === t.id ? " active" : "")} onClick={() => setTab(t.id)}>{t.label}</div>
+        ))}
       </nav>
 
-      {err && <div className="card" style={{ borderColor: "#5a2730", color: "var(--red)" }}>Error: {err} — ¿está corriendo la API?</div>}
-      {!status && !err && <div className="loading">Cargando…</div>}
+      {err && <div className="card" style={{ borderColor: "#5a2730", color: "var(--red)" }}>Error: {err}. Is the API running?</div>}
+      {!status && !err && <div className="loading">Loading...</div>}
 
-      {status && tab === "resumen" && <Resumen status={status} signals={signals} portfolio={portfolio} alerts={alerts} />}
-      {status && tab === "senales" && <Senales signals={signals} />}
-      {status && tab === "operaciones" && <Operaciones trades={trades} alerts={alerts} />}
-      {status && tab === "validacion" && <Validacion forward={forward} />}
+      {status && tab === "overview" && <Overview signals={signals} portfolio={portfolio} alerts={alerts} />}
+      {status && tab === "signals" && <Signals signals={signals} />}
+      {status && tab === "trades" && <Trades trades={trades} alerts={alerts} />}
+      {status && tab === "validation" && <Validation forward={forward} />}
 
       <div className="disclaimer">
-        Modo observador (dry-run): recomienda y registra, no opera. Las cifras de
-        retorno son de backtest/forward; el riesgo real a vigilar es el drawdown.
+        Observer mode (dry-run): it recommends and records, it never places orders. Return
+        figures come from backtest/forward; the real risk to watch is the drawdown.
       </div>
     </div>
   );

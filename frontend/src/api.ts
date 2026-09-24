@@ -1,10 +1,10 @@
-// Capa de acceso a la API. En dev apunta al servidor FastAPI; en prod (servido
-// por la propia API) usa mismo origen.
+// API access layer. In dev it points at the FastAPI server; in production (served
+// by the API itself) it uses the same origin.
 export const API_BASE = import.meta.env.DEV ? "http://127.0.0.1:8787" : "";
 
 export async function getJSON<T>(path: string): Promise<T> {
   const r = await fetch(API_BASE + path);
-  if (!r.ok) throw new Error(`${path} → ${r.status}`);
+  if (!r.ok) throw new Error(`${path} -> ${r.status}`);
   return r.json();
 }
 
@@ -12,7 +12,7 @@ export function exportUrl(from: string, to: string, fmt: "md" | "json"): string 
   return `${API_BASE}/export?date_from=${from}&date_to=${to}&fmt=${fmt}`;
 }
 
-// ---- tipos ----
+// ---- types ----
 export interface Status {
   version: string; mode: string; symbols: string[];
   risk: { risk_per_trade: number; min_profit_target: number; min_rr: number };
@@ -27,7 +27,7 @@ export interface Signal {
   direction: string; bias?: string; entry: number; stop: number; tp: number;
   stop_pct: number | null; tp_pct: number | null; rr: number | string;
   levels: Record<string, number | null>;
-  indicators: { RSI?: number; RSI_sano?: boolean };
+  indicators: { RSI?: number; RSI_healthy?: boolean };
   checklist: Check[]; checklist_ok: number; checklist_total: number;
   position: any | null;
 }

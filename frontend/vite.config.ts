@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// base relativa para que el build sirva bien montado en "/" por FastAPI
+// relative base so the build works when FastAPI mounts it at "/"
 export default defineConfig({
   plugins: [react()],
   base: "./",
