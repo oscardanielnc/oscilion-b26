@@ -1,183 +1,220 @@
-# Oscilion — Roadmap por fases
+# Oscilion - Phased roadmap
 
-Cada fase es autónoma y se construye en una sesión dedicada. Orden pensado para que **el sistema diga la verdad lo antes posible** (datos → backtest) antes de invertir en lo bonito (frontend) o lo arriesgado (dinero real).
+Each phase is self-contained and built in a dedicated session. The order is designed
+so that **the system tells the truth as early as possible** (data -> backtest) before
+investing in the pretty part (frontend) or the risky part (real money).
 
 ```
-F1 ─ Base/infra ──▶ F2 ─ Datos ──▶ F3 ─ Motor análisis ──▶ F4 ─ Backtest ──▶ 🚦 GO/NO-GO
-                                                                                  │
-   F5 ─ Motor en vivo ──▶ F6 ─ Frontend ──▶ F7 ─ Paper ──▶ F8 ─ Auto ──▶ F9 ─ Copy-lead
+P1 - Base/infra --> P2 - Data --> P3 - Analysis engine --> P4 - Backtest --> GO/NO-GO
+                                                                                 |
+   P5 - Live engine --> P6 - Frontend --> P7 - Paper --> P8 - Auto --> P9 - Copy-lead
 ```
 
 ---
 
-## Fase 1 — Base del sistema 🧱
-**Objetivo:** esqueleto sólido, resiliente y desplegable.
-- Estructura de carpetas y paquete `oscilion/`.
+## Phase 1 - System base
+**Goal:** a solid, resilient, deployable skeleton.
+- Folder structure and the `oscilion/` package.
 - `config.py`, `requirements.txt`, `.gitignore`, venv.
-- `persistence/db.py` + `models.py`: esquema completo (§5 de ARCHITECTURE), append-only.
-- `orchestrator.py` con loop resiliente (try/except por tick, logging).
-- `circuit_breaker.py` esqueleto, `notify.py` esqueleto.
+- `persistence/db.py` + `models.py`: full schema (ARCHITECTURE section 5), append-only.
+- `orchestrator.py` with a resilient loop (try/except per tick, logging).
+- `circuit_breaker.py` skeleton, `notify.py` skeleton.
 - `deploy.sh`, `setup_vm.sh`, `oscilion.service`, `oscilion-api.service`.
-- **Entregable:** servicio que arranca, loguea, persiste y se reinicia solo (aún sin lógica de trading).
+- **Deliverable:** a service that starts, logs, persists and restarts itself (no
+  trading logic yet).
 
-## Fase 2 — Datos 📥
-**Objetivo:** datos perfectos, sin look-ahead.
-- `data/fetch.py`: OHLCV multi-TF (1h base, 15m) + funding histórico (ccxt/Binance).
-- `data/store.py`: parquet + DB, detección de huecos, limpieza.
-- `data/universe.py`: universo de monedas + metadata (vol, liquidez).
-- **Entregable:** histórico descargado y auditado de BTC/ETH/SOL+otras; reporte de calidad.
+## Phase 2 - Data
+**Goal:** perfect data, no look-ahead.
+- `data/fetch.py`: multi-TF OHLCV (1h base, 15m) + historical funding (ccxt/Binance).
+- `data/store.py`: parquet + DB, gap detection, cleaning.
+- `data/universe.py`: coin universe + metadata (vol, liquidity).
+- **Deliverable:** downloaded and audited history for BTC/ETH/SOL + others; a quality
+  report.
 
-## Fase 3 — Motor de análisis 🧠
-**Objetivo:** convertir precio en señales medibles (tiempo real, ventana móvil).
-- `features/`: indicadores, rangos (horizontal+diagonal), régimen, reversión (Hurst/OU/VR/ADF).
-- `scoring/conviction.py`: score 0–100 por moneda.
-- `risk/`: `stops.py` (anti-barridas), `sizing.py` (L=2%/stop), `allocation.py` (cartera).
-- **Entregable:** dado un instante, ranking de candidatos con rango, stop, TP, L y % capital.
+## Phase 3 - Analysis engine
+**Goal:** turn price into measurable signals (real time, rolling window).
+- `features/`: indicators, ranges (horizontal + diagonal), regime, reversion
+  (Hurst/OU/VR/ADF).
+- `scoring/conviction.py`: 0-100 score per coin.
+- `risk/`: `stops.py` (anti-sweep), `sizing.py` (L = 2%/stop), `allocation.py`
+  (portfolio).
+- **Deliverable:** at any given instant, a ranking of candidates with range, stop,
+  TP, L and % of capital.
 
-## Fase 4 — Backtest honesto 🔬
-**Objetivo:** ¿hay edge tras costos? La puerta de la verdad.
-- `backtest/engine.py`: walk-forward, sin look-ahead.
-- `backtest/costs.py`: fees + funding + slippage reales.
-- `backtest/metrics.py`: Sharpe, max DD, winrate, MAE/MFE, **calibración**.
-- **Entregable:** informe go/no-go con métricas netas por moneda/régimen. 🚦
+## Phase 4 - Honest backtest
+**Goal:** is there an edge after costs? The moment of truth.
+- `backtest/engine.py`: walk-forward, no look-ahead.
+- `backtest/costs.py`: real fees + funding + slippage.
+- `backtest/metrics.py`: Sharpe, max DD, winrate, MAE/MFE, **calibration**.
+- **Deliverable:** a go/no-go report with net metrics per coin/regime.
 
-## Fase 5 — Motor en vivo ⚡
-**Objetivo:** el cerebro corriendo 24/7.
+## Phase 5 - Live engine
+**Goal:** the brain running 24/7.
 - `signals/state_machine.py`, `entry.py`, `exit.py`, `maker_taker.py`.
-- `scoring/calibration.py`: forward-test real (predicción vs resultado).
-- Alertas: ENTRA / TOMA GANANCIA / SAL.
-- **Entregable:** monitor en vivo que recomienda y registra todo (sin operar).
+- `scoring/calibration.py`: real forward test (prediction vs outcome).
+- Alerts: ENTER / TAKE PROFIT / EXIT.
+- **Deliverable:** a live monitor that recommends and records everything (without
+  trading).
 
-## Fase 6 — Frontend 🖥️
-**Objetivo:** ver los rangos y stops dinámicamente (el valor para el usuario).
-- API FastAPI + React/TS + lightweight-charts.
-- Ranking, rango/stop/TP por moneda, estado, posiciones, historial, equity, calibración.
-- **Entregable:** dashboard en vivo consultable.
+## Phase 6 - Frontend
+**Goal:** see the ranges and stops dynamically (the value for the user).
+- FastAPI API + React/TS + lightweight-charts.
+- Ranking, range/stop/TP per coin, state, positions, history, equity, calibration.
+- **Deliverable:** a live dashboard.
 
-## Fase 7 — Paper trading 📝
-**Objetivo:** validar en vivo sin dinero.
-- `execution/paper.py`: simula fills + costos en tiempo real.
-- Comparar paper vs backtest (¿coherentes?).
-- **Entregable:** track record paper auditable.
+## Phase 7 - Paper trading
+**Goal:** validate live without money.
+- `execution/paper.py`: simulates fills + costs in real time.
+- Compare paper vs backtest (are they consistent?).
+- **Deliverable:** an auditable paper track record.
 
-## Fase 8 — Auto-ejecución 🤖
-**Objetivo:** operar solo, con capital pequeño.
-- `execution/binance.py`: órdenes reales perps, post-only/maker-taker, gestión de stops.
-- Circuit breaker en serio, límites duros.
-- **Entregable:** bot operando real, supervisado, escalando gradual.
+## Phase 8 - Auto-execution
+**Goal:** trade on its own, with small capital.
+- `execution/binance.py`: real perpetuals orders, post-only/maker-taker, stop
+  management.
+- A serious circuit breaker, hard limits.
+- **Deliverable:** a bot trading for real, supervised, scaling gradually.
 
-## Fase 9 — Copy-lead 👥
-**Objetivo:** monetizar vía comisiones de copiadores.
-- Track record verificable, foco en bajo drawdown, ecosistema para retener copiadores.
-- **Entregable:** cuenta lead activa.
-
----
-
-### 🚦 Veredicto go/no-go (2026-06-03)
-
-Campaña honesta: 12 monedas × 3 años, 1h, neto de costos (`research/edge_campaign.py`).
-**Resultado: la estrategia v1 (reversión en bordes de rango) NO tiene edge → PIVOTAR.**
-- Todas las configs pierden (PF 0.72–0.78); los 12 símbolos negativos.
-- Calibración **invertida** (mayor score ⇒ peor winrate) ⇒ score mal especificado.
-- Salidas: stop 66% vs TP 10% ⇒ la tesis "entrar en borde / salir en el opuesto" no se cumple.
-- El Sharpe 1.89 previo (BTC, 120d) era suerte de muestra (única ventana favorable).
-- **15m confirma:** misma campaña en 15m = aún peor (PF 0.71–0.76; más frecuencia ⇒ más
-  costos). El timeframe NO es el problema; es la SEÑAL.
-- La INFRA (datos, backtest, riesgo, motor en vivo) es sólida y reutilizable; el problema es la SEÑAL.
-- **Pivot identificado (probe momentum/breakout):** la reversión pierde (PF 0.76) pero el
-  MOMENTUM tiene la estructura correcta — calibración monótona (a más fuerza de ruptura,
-  más winrate) y el subconjunto de **rupturas fuertes (≥1 ATR) es POSITIVO** neto de costos
-  (PF 1.07, +0.125%/trade, 3092 trades). Veredicto: **PIVOTAR a momentum/breakout**, no descartar.
-- **Validación OOS (breakout_oos.py): ✅ edge CONFIRMADO fuera de muestra pero FINO.**
-  La relación "más fuerza de ruptura → mejor" se mantiene monótona en test no visto
-  (PF test 0.92→1.18). Split anclado TEST: PF 1.01 (breakeven+). Walk-forward POOL OOS:
-  PF 1.18, +0.308%/trade, 1505 trades (3/4 folds positivos). Edge real y marginal: vive
-  o muere en la EJECUCIÓN (entradas maker). Decisión del proyecto: **PIVOT = GO**.
-- **Robustez + recencia:** el edge es amplio (9/12 monedas) y mejor en régimen `range`;
-  el filtro **`range` + ruptura ≥2 ATR repara el período reciente** (único con 2025Q4→ positivo:
-  PF 1.17). Estrategia candidata definida. Caveat: baja frecuencia (~323 trades/3a) ⇒ ruido.
-- **Documentación completa del pivot en `docs/FINDINGS.md`** (hallazgos, consideraciones, backlog).
-- Backlog priorizado: ejecución maker (mayor impacto), confirmar candidato OOS, TP/trailing,
-  subir sample (multi-TF/instrumentos), sizing de cartera, forward-test en vivo.
-- Reportes: `data/reports/{edge_campaign_1h,edge_campaign_15m,momentum_probe,breakout_oos,breakout_robustness,breakout_recency}.md`.
+## Phase 9 - Copy-lead
+**Goal:** monetize through copier commissions.
+- A verifiable track record, focus on low drawdown, an ecosystem to retain copiers.
+- **Deliverable:** an active lead account.
 
 ---
 
-## 🗺️ Fase de pruebas — rescate del proyecto BTC/Sentinel (multi-sesión)
+### Go/no-go verdict (2026-06-03)
 
-Contexto: la revisión de `C:\Users\LENOVO\btc` (ver `docs/BTC_SALVAGE.md`) confirma —de
-forma independiente— el pivot de Oscilion: la reversión pierde, momentum/tendencia/breakout
-ganan OOS. Aporta datos (5 años 1m BTC + 14 alts), 5 estrategias direccionales y aprendizajes.
-**Pero sus backtests salieron de un harness optimista** ⇒ todo se re-valida con el motor
-honesto de Oscilion. Plan por sesiones (cada una entrega evidencia o mata una hipótesis):
+Honest campaign: 12 coins x 3 years, 1h, net of costs (`research/edge_campaign.py`).
+**Result: the v1 strategy (reversion at range edges) has NO edge -> PIVOT.**
+- Every config loses (PF 0.72-0.78); all 12 symbols negative.
+- **Inverted** calibration (higher score => worse winrate) => a misspecified score.
+- Exits: stop 66% vs TP 10% => the "enter at the edge / exit at the opposite one"
+  thesis does not hold.
+- The earlier 1.89 Sharpe (BTC, 120d) was sample luck (the one favorable window).
+- **15m confirms it:** the same campaign on 15m = even worse (PF 0.71-0.76; more
+  frequency => more costs). The timeframe is NOT the problem; the SIGNAL is.
+- The INFRA (data, backtest, risk, live engine) is solid and reusable; the problem is
+  the SIGNAL.
+- **Pivot identified (momentum/breakout probe):** reversion loses (PF 0.76) but
+  MOMENTUM has the right structure: monotonic calibration (the stronger the breakout,
+  the higher the winrate) and the subset of **strong breakouts (>= 1 ATR) is
+  POSITIVE** net of costs (PF 1.07, +0.125%/trade, 3092 trades). Verdict: **PIVOT to
+  momentum/breakout**, do not discard.
+- **OOS validation (breakout_oos.py): edge CONFIRMED out of sample, but THIN.** The
+  "stronger breakout -> better" relationship stays monotonic on unseen test data
+  (test PF 0.92 -> 1.18). Anchored split TEST: PF 1.01 (breakeven+). Walk-forward OOS
+  POOL: PF 1.18, +0.308%/trade, 1505 trades (3/4 folds positive). A real but marginal
+  edge: it lives or dies on EXECUTION (maker entries). Project decision:
+  **PIVOT = GO**.
+- **Robustness + recency:** the edge is broad (9/12 coins) and better in the `range`
+  regime; the **`range` + breakout >= 2 ATR** filter **repairs the recent period** (the
+  only one with 2025Q4-> positive: PF 1.17). Candidate strategy defined. Caveat: low
+  frequency (~323 trades/3y) => noise.
+- **Full documentation of the pivot in `docs/FINDINGS.md`** (findings,
+  considerations, backlog).
+- Prioritized backlog: maker execution (largest impact), confirm the candidate OOS,
+  TP/trailing, grow the sample (multi-TF/instruments), portfolio sizing, live forward
+  test.
+- Reports: `data/reports/{edge_campaign_1h,edge_campaign_15m,momentum_probe,breakout_oos,breakout_robustness,breakout_recency}.md`.
 
-| Sesión | Objetivo | Entregable | Hipótesis |
+---
+
+## Testing phase - rescuing the BTC/Sentinel project (multi-session)
+
+Context: the review of an earlier local research project (BTC/Sentinel, see
+`docs/BTC_SALVAGE.md`) independently confirms Oscilion's pivot: reversion loses,
+momentum/trend/breakout win OOS. It contributes data (5 years of 1m BTC + 14 alts),
+5 directional strategies and lessons learned. **But its backtests came from an
+optimistic harness** => everything is re-validated with Oscilion's honest engine.
+Plan per session (each one delivers evidence or kills a hypothesis):
+
+| Session | Goal | Deliverable | Hypothesis |
 |---|---|---|---|
-| **R0** ✅ | Revisión a fondo + plan | `BTC_SALVAGE.md` + esta hoja de ruta | — |
-| **R1** ✅ | Resample causal 1h→2h/4h; **motor honesto con salida 15m pesimista** (`engine_strat.py`); BTC 1m ingerido; 15m≈1m verificado | engine + datos | — |
-| **R2** ✅ | Portadas MOMENTUM_PULLBACK y EMA_TREND_STACK; validación honesta **por moneda** (default+sweep OOS+walk-forward) + chequeo taker/maker | `VALIDATION_R1_R2.md` | H1✅, H3 (maker chico), H4✅ |
-| **R3** ✅ | Portadas **ORB_BREAKOUT** y **BREAK_RETEST** (gate de frescura incluido); validadas por moneda. **ORB rescata alts** (mediana +0.029; genuinos LINK/DOT/TRX). break_retest falla salvo TRX. VWAP_ANCHOR pendiente (opcional). | `STRATEGY_MAP.md` | H1✅, H2 (gate incluido) |
-| **R4** | **Ejecución maker**: modelar fills límite (no-fill / adverse selection) y re-validar las supervivientes | comparación taker vs maker | H3 |
-| **R5** | **Exits**: grid por estrategia (TP fijo vs trailing vs hold-a-T2); **régimen** y **sesión** como filtros | exit óptimo por táctica | H5, H7, H8 |
-| **R6** | **Cartera**: combinar supervivientes poco correlacionados; calibración forward; **forward-test en vivo (dry-run)** acumulando track record | señal multi-moneda + monitor | H6 |
+| **R0** (done) | Thorough review + plan | `BTC_SALVAGE.md` + this roadmap | - |
+| **R1** (done) | Causal 1h -> 2h/4h resample; **honest engine with a pessimistic 15m exit** (`engine_strat.py`); BTC 1m ingested; 15m ~ 1m verified | engine + data | - |
+| **R2** (done) | Ported MOMENTUM_PULLBACK and EMA_TREND_STACK; honest **per-coin** validation (default + OOS sweep + walk-forward) + taker/maker check | `VALIDATION_R1_R2.md` | H1 confirmed, H3 (maker is small), H4 confirmed |
+| **R3** (done) | Ported **ORB_BREAKOUT** and **BREAK_RETEST** (freshness gate included); validated per coin. **ORB rescues alts** (median +0.029; genuine on LINK/DOT/TRX). break_retest fails except on TRX. VWAP_ANCHOR pending (optional). | `STRATEGY_MAP.md` | H1 confirmed, H2 (gate included) |
+| **R4** | **Maker execution**: model limit fills (no-fill / adverse selection) and re-validate the survivors | taker vs maker comparison | H3 |
+| **R5** | **Exits**: grid per strategy (fixed TP vs trailing vs hold-to-T2); **regime** and **session** as filters | best exit per tactic | H5, H7, H8 |
+| **R6** | **Portfolio**: combine weakly correlated survivors; forward calibration; **live forward test (dry-run)** building a track record | multi-coin signal + monitor | H6 |
 
-Gate de cada estrategia para "sobrevivir": OOS ≥ 0.70 vs baseline · expectativa positiva
-neta de costos · calibración monótona · estable en walk-forward. Lo que no pasa, se archiva
-con evidencia (no se fuerza). Hipótesis H1–H8 detalladas en `docs/BTC_SALVAGE.md §6`.
+Gate for a strategy to "survive": OOS >= 0.70 vs baseline, positive expectancy net
+of costs, monotonic calibration, stable in walk-forward. Whatever does not pass is
+archived with evidence (not forced). Hypotheses H1-H8 detailed in
+`docs/BTC_SALVAGE.md` section 6.
 
-### 🏗️ Construcción del pilot v1 (dirección confirmada) — ver `docs/PROJECT_STATE.md`
-- ✅ **Paso 1 — Refactor**: estrategias como ciudadanos de primera clase (`oscilion/strategies/`),
-  mapa moneda→estrategia (`assignment.py`), `context.py` compartido backtest/live, motor honesto
-  reapuntado. Limpieza del código muerto de reversión-live.
-- ✅ **Fase A — validación forward**: `live/forward.py` (backtest vs forward por moneda×estrategia
-  → tabla `forward_results`), `live/monitor.py` (dry-run: alertas ENTRA/SAL + trades virtuales con
-  R), orquestador reapuntado, API `/forward` `/trades` `/state`, CLI `python -m oscilion.live.forward`.
-  Directiva permanente: logs concisos en BD consultables desde el frontend.
-- ✅ **Fase B — cartera v1** (`research/phase_b.py`, `data/reports/phase_b.md`): hecha con
-  disciplina anti-overfit. B1: tunear por moneda sobreajusta → **baseline fijo tp_r=4** (aguanta
-  OOS en las 6). B2: **equal-weight** (edge-weight sobreajusta). B3: L=2%/stop, **sin multiplicador**.
-  B4: correlación (TRX diversifica). B5: **máx 3 concurrentes, 2 por clúster**. B6: cartera OOS
-  **Sharpe 1.89, ret +207%, MaxDD −26%**. Config en `oscilion/strategies/tuned.py` (en uso).
-  Pendiente futuro: re-tunear con más datos forward, weights dinámicos, fees maker.
-- ✅ **Frontend v1** (React+Vite+TS): vistas Resumen / Señales en vivo / Validación forward;
-  servido por la API; ntfy.sh (canal privado).
-- ✅ **Deploy v1 en VM Oracle** (2026-06-03): dry-run 24/7, venv python3.11 aislado, datos
-  sembrados, dashboard público en http://<IP_VM>:8787, `bash /opt/oscilion/deploy.sh`
-  de un comando. Ver `docs/DEPLOY.md` y memoria. **AHORA: vigilancia diaria del forward.**
-- ⬜ Afinar con datos forward reales · más estrategias/monedas (SOL/ETH/AVAX, VWAP) · paper/live.
+### Building pilot v1 (direction confirmed) - see `docs/PROJECT_STATE.md`
+- Done - **Step 1, refactor**: strategies as first-class citizens
+  (`oscilion/strategies/`), coin -> strategy map (`assignment.py`), `context.py`
+  shared by backtest/live, honest engine re-pointed. Cleanup of the dead
+  reversion-live code.
+- Done - **Phase A, forward validation**: `live/forward.py` (backtest vs forward per
+  coin x strategy -> `forward_results` table), `live/monitor.py` (dry-run: ENTER/EXIT
+  alerts + virtual trades with R), orchestrator re-pointed, API `/forward` `/trades`
+  `/state`, CLI `python -m oscilion.live.forward`. Standing directive: concise logs in
+  the DB, queryable from the frontend.
+- Done - **Phase B, portfolio v1** (`research/phase_b.py`, `data/reports/phase_b.md`):
+  done with anti-overfit discipline. B1: per-coin tuning overfits -> **fixed baseline
+  tp_r=4** (holds OOS on all 6). B2: **equal weight** (edge weighting overfits). B3:
+  L = 2%/stop, **no multiplier**. B4: correlation (TRX diversifies). B5: **max 3
+  concurrent, 2 per cluster**. B6: OOS portfolio **Sharpe 1.89, return +207%, MaxDD
+  -26%** (backtest). Config in `oscilion/strategies/tuned.py` (in use). Future work:
+  re-tune with more forward data, dynamic weights, maker fees.
+- Done - **Frontend v1** (React + Vite + TS): Overview / Live signals / Forward
+  validation views; served by the API; ntfy.sh (private topic).
+- Done - **Deploy v1 on an Oracle VM** (2026-06-03): dry-run 24/7, isolated python3.11
+  venv, seeded data, dashboard at http://<VM_IP>:8787, one-command
+  `bash /opt/oscilion/deploy.sh`. See `docs/DEPLOY.md`. **NOW: daily watch of the
+  forward test.**
+- Pending - Tune with real forward data, more strategies/coins (SOL/ETH/AVAX, VWAP),
+  paper/live.
 
-### Estado actual
-- ✅ Fase 0 — Visión y arquitectura definidas (este conjunto de docs).
-- ✅ Fase 1 — Base del sistema: paquete `oscilion/`, config, persistencia
-  append-only (SQLite WAL), orquestador resiliente, circuit breaker, notify,
-  API mínima y despliegue (systemd + `deploy.sh`/`setup_vm.sh`). Verificado.
-- ✅ Fase 2 — Datos: `data/{fetch,store,universe,pipeline}.py`, OHLCV multi-TF
-  + funding (ccxt/Binance), **sin look-ahead** (descarta vela en curso),
-  parquet + DB (`ohlcv_status`), detección de huecos/dups, reporte de calidad,
-  CLI `python -m oscilion.data` y endpoint `/data`. Verificado contra Binance.
-- ✅ Fase 3 — Motor de análisis: `features/{indicators,reversion,ranges,regime}.py`
-  (ATR/BB/Keltner/VWAP/Donchian/ADX/RSI, Hurst/OU/VR/ADF, rango horizontal+canal
-  diagonal, clasificador rango|tendencia|caos), `scoring/conviction.py` (0-100),
-  `risk/{stops,sizing,allocation}.py` (anti-barridas, L=2%/stop, Kelly+corr) y
-  `analysis.py` (ranking + CLI `python -m oscilion.analysis`). Verificado:
-  invariante de riesgo exacta y clasificador valida OU sintético como `range`.
-- ✅ Fase 4 — Backtest honesto: `backtest/{costs,metrics,engine,report}.py`,
-  walk-forward event-driven SIN look-ahead (decide al cierre i, llena al open
-  i+1; intrabar conservador stop-primero), costos reales (fees maker/taker,
-  slippage, funding 8h), métricas (Sharpe, MaxDD, winrate, PF, MAE/MFE,
-  calibración) e informe go/no-go. CLI `python -m oscilion.backtest`.
-  Reusa la MISMA señal del live (`candidate_from_df`). 🚦 Veredicto inicial
-  (lógica naïve, ~120d 1h): **NO-GO** (sin confirmación de giro aún; mercado
-  en tendencia). Falta validar con histórico multi-año + giro de Fase 5.
-- ✅ Fase 5 — Motor en vivo: `signals/{entry,exit,maker_taker,state_machine,live}.py`
-  + `scoring/calibration.py`. Máquina de estados por moneda (ESPERANDO→
-  ACERCÁNDOSE→EN_TRADE) con **confirmación de giro**, gestión de salida
-  (stop/tp/break/trailing/parcial), maker vs taker, calibración forward y
-  alertas ENTRA/TOMA-GANANCIA/SAL. Integrado al orquestador (monitor en vivo,
-  sin operar); API `/state` y `/calibration`. La confirmación de giro también
-  es opcional en el backtest (`--confirm`).
-  🚦 **Hallazgo F5 (1h, ~120d):** la confirmación de giro da vuelta el edge —
-  SIN: winrate 28% PF 0.87 Sharpe −0.47 ret −41% · CON: winrate 40% PF 1.22
-  Sharpe 1.89 ret +47%. Veredicto formal aún NO-GO (PF 1.22 < 1.3) y muestra
-  corta: **prometedor, no confirmado**. Falta validación multi-año.
-- ⬜ Fase 6 — Frontend — siguiente sesión.
+### Status by phase (as recorded at the time)
+- Done - Phase 0: vision and architecture defined (this set of docs).
+- Done - Phase 1: system base: `oscilion/` package, config, append-only persistence
+  (SQLite WAL), resilient orchestrator, circuit breaker, notify, minimal API and
+  deployment (systemd + `deploy.sh`/`setup_vm.sh`). Verified.
+- Done - Phase 2: data: `data/{fetch,store,universe,pipeline}.py`, multi-TF OHLCV +
+  funding (ccxt/Binance), **no look-ahead** (drops the forming candle), parquet + DB
+  (`ohlcv_status`), gap/dupe detection, quality report, CLI `python -m oscilion.data`
+  and the `/data` endpoint. Verified against Binance.
+- Done - Phase 3: analysis engine: `features/{indicators,reversion,ranges,regime}.py`
+  (ATR/BB/Keltner/VWAP/Donchian/ADX/RSI, Hurst/OU/VR/ADF, horizontal range + diagonal
+  channel, range|trend|chaos classifier), `scoring/conviction.py` (0-100),
+  `risk/{stops,sizing,allocation}.py` (anti-sweep, L = 2%/stop, Kelly + corr) and
+  `analysis.py` (ranking + CLI `python -m oscilion.analysis`). Verified: exact risk
+  invariant, and the classifier labels a synthetic OU series as `range`.
+- Done - Phase 4: honest backtest: `backtest/{costs,metrics,engine,report}.py`,
+  event-driven walk-forward WITHOUT look-ahead (decide at the close of i, fill at the
+  open of i+1; conservative intrabar, stop first), real costs (maker/taker fees,
+  slippage, 8h funding), metrics (Sharpe, MaxDD, winrate, PF, MAE/MFE, calibration)
+  and a go/no-go report. CLI `python -m oscilion.backtest`. Reuses the SAME signal as
+  live (`candidate_from_df`). Initial verdict (naive logic, ~120d 1h): **NO-GO** (no
+  turn confirmation yet; trending market). Multi-year validation + phase 5's turn
+  confirmation still pending.
+- Done - Phase 5: live engine: `signals/{entry,exit,maker_taker,state_machine,live}.py`
+  + `scoring/calibration.py`. Per-coin state machine (WAITING -> APPROACHING ->
+  IN_TRADE) with **turn confirmation**, exit management (stop/tp/break/trailing/
+  partial), maker vs taker, forward calibration and ENTER / TAKE PROFIT / EXIT
+  alerts. Integrated into the orchestrator (live monitor, no trading); API `/state`
+  and `/calibration`. Turn confirmation is also optional in the backtest
+  (`--confirm`).
+  **Phase 5 finding (1h, ~120d):** turn confirmation flips the edge. WITHOUT: winrate
+  28%, PF 0.87, Sharpe -0.47, return -41%. WITH: winrate 40%, PF 1.22, Sharpe 1.89,
+  return +47%. Formal verdict still NO-GO (PF 1.22 < 1.3) and a short sample:
+  **promising, not confirmed**. Multi-year validation pending. (It was later run: see
+  the 2026-06-03 verdict above; the 120-day result did not survive 3 years.)
+- Phase 6: frontend. Built afterwards as part of pilot v1 (see above).
+
+### Final status (2026-08-03): project closed
+
+The pilot ran in dry-run on the VM from 2026-06-08 to 2026-08-02 and was evaluated
+against its own go/no-go criteria in `docs/AUDIT_2026-08-03.md`: 110 closed forward
+trades, -64.2R, 14.5% winrate against a 31.4% breakeven. Four strategies were
+discarded on decisive evidence; the fifth (`break_retest`) was inconclusive and
+discarded for lack of a reliable validation method. The VM service was stopped and the
+DB kept as evidence. Verdict: **there is no edge; the project is closed.** The phase 5 live
+modules listed above (`signals/state_machine.py`, `exit.py`, `maker_taker.py`,
+`live.py`, `scoring/calibration.py`) were superseded by the pilot's
+`oscilion/live/` layer and are no longer in the repository; see ARCHITECTURE
+section 8.

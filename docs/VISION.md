@@ -1,71 +1,96 @@
-# Oscilion — Visión
+# Oscilion - Vision
 
-> ⚠️ **ACTUALIZACIÓN 2026-06-03 — PIVOT.** La validación honesta (12 monedas × 3
-> años, neto de costos) **descartó la tesis de reversión** de este documento: no
-> tiene edge y su calibración está invertida. El edge está en la **RUPTURA**
-> (momentum/breakout de rango), no en el rebote — exactamente el riesgo que el §
-> "veredicto honesto" marcó como decisivo. Ver **`docs/FINDINGS.md`** para la
-> tesis vigente y los resultados. El resto de este documento queda como registro
-> histórico de la hipótesis v1; los principios y el modelo de riesgo siguen vigentes.
+> **UPDATE 2026-06-03 - PIVOT.** Honest validation (12 coins x 3 years, net of
+> costs) **ruled out the reversion thesis** in this document: it has no edge and
+> its calibration is inverted. The edge was in the **BREAKOUT** (range
+> momentum/breakout), not in the bounce, which is exactly the risk the "honest
+> verdict" section flagged as decisive. See **`docs/FINDINGS.md`** for the thesis
+> that replaced it and its results. The rest of this document stays as the
+> historical record of the v1 hypothesis; the principles and the risk model still
+> apply.
 
-## 🎯 Qué es
+## What it is
 
-Sistema que analiza BTC, ETH, SOL y otras criptos para descubrir **rangos de oscilación** (horizontales y diagonales) y operar **reversión intradía** con alta convicción: entrar cerca de un borde del rango *con confirmación de giro*, salir en el borde opuesto, y proteger con un stop calculado contra barridas.
+A system that analyzes BTC, ETH, SOL and other cryptocurrencies to discover
+**oscillation ranges** (horizontal and diagonal) and trade **intraday reversion**
+with high conviction: enter near one edge of the range *with turn confirmation*,
+exit at the opposite edge, and protect the trade with a stop computed against
+stop sweeps.
 
-**Frecuencia:** baja (1–2 trades/día, o ninguno si no hay claridad). Calidad sobre cantidad.
+**Frequency:** low (1-2 trades/day, or none when there is no clarity). Quality over
+quantity.
 
-## 🌟 Norte (hacia dónde vamos)
+## North star (where we are heading)
 
 ```
-Calculadora  →  Monitor en vivo + alertas  →  Bot semi-auto  →  Bot 100% auto  →  Copy-lead Binance
-   (Fase 2-3)        (Fase 4-5)                 (Fase 6)           (Fase 7)          (Fase 8)
+Calculator  ->  Live monitor + alerts  ->  Semi-auto bot  ->  100% auto bot  ->  Binance copy-lead
+ (Phase 2-3)        (Phase 4-5)              (Phase 6)          (Phase 7)          (Phase 8)
 ```
 
-El valor final: un bot que opera solo, con bajo drawdown, del que otros copian y pagamos/cobramos comisión (10–12%). Por eso desde el día 1: arquitectura bot-ready, riesgo controlado y **track record auditable**.
+The end value: a bot that trades on its own, with low drawdown, that others copy
+while we pay/earn a commission (10-12%). That is why, from day 1: a bot-ready
+architecture, controlled risk and an **auditable track record**.
 
-## 🧭 Principios (no negociables)
+## Principles (non-negotiable)
 
-1. **Honestidad antes que esperanza.** El sistema debe poder decir *"hoy no operes"* y *"esta estrategia no tiene edge"*. Eso es éxito, no fracaso.
-2. **Auditabilidad total.** Todo se guarda (snapshots, predicciones, decisiones, trades, parámetros). Sin datos no hay aprendizaje. El registro forward es el antídoto real contra el autoengaño del overfitting.
-3. **Riesgo primero.** Nunca arriesgar > 2% por trade. La supervivencia importa más que el retorno.
-4. **Solo lo predecible.** Operamos régimen de rango / canal limpio. El caos se observa, no se opera.
-5. **Adaptado por moneda.** Nada se trata igual: apalancamiento, stops y tamaño se calibran por la volatilidad de cada moneda.
-6. **Iterar con evidencia.** Si la v1 no rinde, diagnosticar con datos y mejorar dirigido; no abandonar a ciegas ni insistir a ciegas.
+1. **Honesty before hope.** The system must be able to say *"do not trade today"*
+   and *"this strategy has no edge"*. That is success, not failure.
+2. **Full auditability.** Everything is stored (snapshots, predictions, decisions,
+   trades, parameters). Without data there is no learning. The forward record is
+   the real antidote to the self-deception of overfitting.
+3. **Risk first.** Never risk more than 2% per trade. Survival matters more than
+   return.
+4. **Only what is predictable.** We trade range regimes / clean channels. Chaos is
+   observed, not traded.
+5. **Adapted per coin.** Nothing is treated the same: leverage, stops and size are
+   calibrated to each coin's volatility.
+6. **Iterate with evidence.** If v1 does not perform, diagnose with data and make
+   targeted improvements; do not abandon blindly nor insist blindly.
 
-## 💡 Las ideas centrales
+## The core ideas
 
-| Concepto | Traducción técnica |
+| Concept | Technical translation |
 |---|---|
-| Rango horizontal | Bollinger / Keltner / VWAP bands / Donchian sobre S/R |
-| Rango diagonal (tendencia) | Canal de regresión lineal |
-| "¿Qué moneda respeta su rango?" | Hurst (<0.5), half-life OU, variance ratio, ADF → **score de reversión** |
-| Régimen | Clasificador rango vs tendencia (ADX, ancho/estabilidad de bandas) + régimen de volatilidad |
-| Convicción | Score 0–100% **calibrado** (80% ⇒ histórico ~80% de acierto) |
-| Stop seguro | Borde + más allá del clúster de barridas + buffer ATR |
-| Apalancamiento | = 2% ÷ distancia_stop → riesgo fijo, liquidación lejísimos |
-| "Mejor entrada" | Borde + **confirmación de giro** (no a mitad de rango) |
-| Salir a tiempo | Detección de agotamiento de momentum + ruptura en contra |
+| Horizontal range | Bollinger / Keltner / VWAP bands / Donchian over S/R |
+| Diagonal range (trend) | Linear regression channel |
+| "Which coin respects its range?" | Hurst (<0.5), OU half-life, variance ratio, ADF -> **reversion score** |
+| Regime | Range vs trend classifier (ADX, band width/stability) + volatility regime |
+| Conviction | **Calibrated** 0-100% score (80% => historically ~80% hit rate) |
+| Safe stop | Edge + beyond the sweep cluster + ATR buffer |
+| Leverage | = 2% / stop_distance -> fixed risk, liquidation very far away |
+| "Best entry" | Edge + **turn confirmation** (not in the middle of the range) |
+| Exit in time | Momentum exhaustion detection + adverse breakout |
 
-## ⚖️ El veredicto honesto (estado: hipótesis a validar)
+## The honest verdict (status: hypothesis to validate)
 
-- **Construirlo: viable.** La estrategia es legítima y la gestión de riesgo es superior a la media retail.
-- **Que sea rentable: no garantizado.** Depende de un edge predictivo que **solo el backtest honesto + forward-test** pueden confirmar. Es posible que no exista tras costos.
-- **Riesgo clave:** distinguir en vivo *rebote* de *ruptura*. Ahí se gana o se pierde.
-- **Expectativa realista:** un Sharpe neto ~1–1.5 en un subconjunto de monedas/regímenes sería un buen resultado operable. No es una máquina de imprimir dinero.
+- **Building it: viable.** The strategy is legitimate and the risk management is
+  better than the retail average.
+- **Being profitable: not guaranteed.** It depends on a predictive edge that
+  **only an honest backtest + forward test** can confirm. It may not exist after
+  costs.
+- **Key risk:** telling a *bounce* from a *breakout* live. That is where it is won
+  or lost.
+- **Realistic expectation:** a net Sharpe of ~1-1.5 on a subset of coins/regimes
+  would be a good, tradeable result. It is not a money printer.
 
-## 🚦 Go / No-Go (puerta de decisión)
+## Go / No-Go (decision gate)
 
-Antes de arriesgar dinero real, el sistema debe pasar:
+Before risking real money, the system must pass:
 
-- [ ] Backtest walk-forward **con costos reales** (fees + funding + slippage) → expectativa positiva.
-- [ ] Score **calibrado** (probabilidades que se cumplen).
-- [ ] Drawdown máximo tolerable y estable.
-- [ ] **Paper trading** en vivo coherente con el backtest.
+- [ ] Walk-forward backtest **with real costs** (fees + funding + slippage) ->
+      positive expectancy.
+- [ ] **Calibrated** score (probabilities that hold up).
+- [ ] Tolerable and stable maximum drawdown.
+- [ ] Live **paper trading** consistent with the backtest.
 
-Si pasa → capital pequeño → escalar. Si no → diagnosticar, iterar, o pivotar/parar honestamente.
+If it passes -> small capital -> scale. If not -> diagnose, iterate, or pivot/stop
+honestly.
 
-## 🛑 Lo que NO haremos
+## What we will NOT do
 
-- Estrategias **sin stop-loss** ("esperar a que el precio vuelva"). Curva bonita hasta que un cisne negro liquida todo. Es riesgo escondido, no edge.
-- Apalancamiento extremo (margen mínimo) por "eficiencia". La liquidación se acerca peligrosamente.
-- Confiar en rangos pasados fijos. Todo se recalcula en ventana móvil, en tiempo real.
+- Strategies **without a stop-loss** ("wait for price to come back"). A pretty curve
+  until a black swan liquidates everything. That is hidden risk, not edge.
+- Extreme leverage (minimum margin) for "efficiency". Liquidation gets dangerously
+  close.
+- Trust fixed past ranges. Everything is recomputed on a rolling window, in real
+  time.

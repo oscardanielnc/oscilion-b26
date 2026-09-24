@@ -1,88 +1,100 @@
-# Oscilion — Modelo de Riesgo
+# Oscilion - Risk Model
 
-El corazón del sistema. Todo trade respeta esta matemática.
+The heart of the system. Every trade follows this math.
 
-## 1. La ecuación maestra
+## 1. The master equation
 
 ```
-Apalancamiento (L) = Riesgo_máx(%) ÷ Distancia_stop(%)
-                   = 2% ÷ stop%
+Leverage (L) = Max_risk(%) / Stop_distance(%)
+             = 2% / stop%
 ```
 
-Consecuencias automáticas (sin elegir números a mano):
+Automatic consequences (no numbers picked by hand):
 
-| Propiedad | Resultado | Por qué |
+| Property | Result | Why |
 |---|---|---|
-| Pérdida si salta el stop | **= 2% del margen** siempre | L · stop% = 2% |
-| Ganancia si llega a meta | **= 2% · RR** | L · move% = 2% · (move/stop) |
-| Distancia a liquidación | **~50× la del stop** | stop está al 2% del camino a la liquidación |
-| Apalancamiento por moneda | alto en baja-vol, bajo en alta-vol | stop fino ⇒ L grande |
+| Loss if the stop fires | **= 2% of the margin**, always | L * stop% = 2% |
+| Gain if the target is hit | **= 2% * RR** | L * move% = 2% * (move/stop) |
+| Distance to liquidation | **~50x the stop distance** | the stop sits at 2% of the way to liquidation |
+| Leverage per coin | high on low-vol coins, low on high-vol coins | tight stop => large L |
 
-> 📌 **Regla de oro:** el usuario piensa en "pierdo máx 2% / gano mín 5%". El sistema elige el apalancamiento para que eso se cumpla, sea cual sea la distancia del stop.
+> **Golden rule:** the user thinks in "I lose at most 2% / I make at least 5%". The
+> system picks the leverage so that holds, whatever the stop distance is.
 
-## 2. El filtro RR ≥ 2.5
+## 2. The RR >= 2.5 filter
 
-Como `ganancia = 2% · RR`, para una meta de **+5%** se necesita **RR ≥ 2.5** (la meta a ≥ 2.5× la distancia del stop).
+Since `gain = 2% * RR`, a **+5%** target needs **RR >= 2.5** (the target at >= 2.5x
+the stop distance).
 
 ```
-profit% = 2% × RR
-RR 2.5 → +5%   |   RR 3 → +6%   |   RR 4 → +8%
+profit% = 2% x RR
+RR 2.5 -> +5%   |   RR 3 -> +6%   |   RR 4 -> +8%
 ```
 
-➡️ **Una moneda cuyo setup no ofrece RR ≥ 2.5 NO se opera ese día.** Es un filtro, no una preferencia.
+**A coin whose setup does not offer RR >= 2.5 is NOT traded that day.** It is a
+filter, not a preference.
 
-## 3. Ejemplo por moneda (capital $10k)
+## 3. Example per coin ($10k capital)
 
-| Moneda | Vol/día | Stop seguro | L = 2%/stop | Meta (RR≥2.5) | Pérdida máx |
+| Coin | Vol/day | Safe stop | L = 2%/stop | Target (RR>=2.5) | Max loss |
 |---|---|---|---|---|---|
-| BTC | ~1.5% | 0.5% | ~4× | +5% (move ~1.25%) | −2% |
-| ETH | ~3% | 1.2% | ~1.7× | +5% (move ~3%) | −2% |
-| Alt volátil | ~10% | 4% | ~0.5× | +5% (move ~10%) | −2% |
+| BTC | ~1.5% | 0.5% | ~4x | +5% (move ~1.25%) | -2% |
+| ETH | ~3% | 1.2% | ~1.7x | +5% (move ~3%) | -2% |
+| Volatile alt | ~10% | 4% | ~0.5x | +5% (move ~10%) | -2% |
 
-## 4. Stop anti-barridas 🩸
+## 4. Anti-sweep stop
 
-El nivel obvio (p.ej. 100) es donde cazan stops. El stop NO va ahí.
-
-```
-   rango: [100 ────────────── 120]
-                │
-   clúster de stops obvios →  99-98  ← zona de barrida institucional
-                │
-   STOP SEGURO  →  97.9   (más allá del clúster + buffer ATR)
-```
-
-Inputs para calcularlo: mechas históricas que perforaron y revirtieron, mapa de liquidaciones/stops, ruido típico (ATR) de la moneda. Si el stop seguro queda más lejos → **L baja solo**, pérdida sigue en 2%. Sin costo de riesgo extra.
-
-## 5. Sizing de cartera (multi-moneda)
-
-El usuario elige hasta ~3 monedas del top. Cada una mantiene su −2%/+5% **sobre su propio margen**. Peso del capital por:
+The obvious level (e.g. 100) is where stops get hunted. The stop does NOT go there.
 
 ```
-peso_i ∝ f( conviccion_i , 1/volatilidad_i , correlación_entre_elegidas )
+   range: [100 -------------- 120]
+                |
+   obvious stop cluster ->  99-98  <- institutional sweep zone
+                |
+   SAFE STOP    ->  97.9   (beyond the cluster + ATR buffer)
 ```
 
-- **Convicción** (score) → más capital al más probable.
-- **Volatilidad** → menos a la más errática.
-- **Correlación** ⚠️ → BTC/ETH/SOL van casi juntos. 3 longs correlacionados = **1 sola apuesta triplicada**, no diversificación. El sistema lo avisa y ajusta.
-- Método: **Kelly fraccionado** (acota el tamaño solo) con la versión proporcional como referencia visible.
+Inputs to compute it: historical wicks that pierced and reverted, the liquidation/
+stop map, the coin's typical noise (ATR). If the safe stop ends up further away ->
+**L drops on its own**, and the loss stays at 2%. No extra risk cost.
 
-Peor caso (todos los trades saltan el stop el mismo día) ≈ **−2% del capital total** si está desplegado al 100%.
+## 5. Portfolio sizing (multi-coin)
 
-## 6. TP dinámico
+The user picks up to ~3 coins from the top. Each keeps its -2%/+5% **on its own
+margin**. Capital weight by:
 
-`+5%` es el **piso para entrar**, no el techo. En el trade:
-- Si el momentum tiene convicción de seguir → la meta se extiende con **trailing**.
-- Si el momentum se agota a mitad de camino → **avisar / tomar ganancia parcial**.
-- Trailing sube el stop a break-even apenas el trade va a favor.
+```
+weight_i ~ f( conviction_i , 1/volatility_i , correlation_among_chosen )
+```
 
-## 7. Maker vs Taker (decisión de ejecución)
+- **Conviction** (score) -> more capital to the most likely setup.
+- **Volatility** -> less to the most erratic one.
+- **Correlation** -> BTC/ETH/SOL move almost together. 3 correlated longs = **a
+  single tripled bet**, not diversification. The system warns about it and adjusts.
+- Method: **fractional Kelly** (caps the size by itself) with the proportional
+  version shown as a reference.
 
-| Acción | ¿Urgencia? | Orden | Costo (USDC) | Regla |
+Worst case (every trade hits its stop on the same day) ~ **-2% of total capital** if
+100% deployed.
+
+## 6. Dynamic TP
+
+`+5%` is the **floor to enter**, not the ceiling. During the trade:
+- If momentum has conviction to continue -> the target extends with a **trailing**
+  stop.
+- If momentum runs out halfway -> **warn / take partial profit**.
+- The trailing stop moves to break-even as soon as the trade goes in our favor.
+
+## 7. Maker vs taker (execution decision)
+
+| Action | Urgent? | Order | Cost (USDC) | Rule |
 |---|---|---|---|---|
-| Entrada en borde | No | Límite **post-only** (maker) | 0% | Si no llena, no se opera. Sin daño. |
-| Take-profit en meta | No | Límite maker | 0% | Paciente, espera el precio. |
-| **Stop / ruptura en contra** | **SÍ** | Mercado / taker | ~0.036% | **Salir ya.** Nunca arriesgar el fill por ahorrar fee. |
+| Entry at the edge | No | **Post-only** limit (maker) | 0% | If it does not fill, no trade. No harm. |
+| Take-profit at target | No | Maker limit | 0% | Patient, waits for the price. |
+| **Stop / adverse breakout** | **YES** | Market / taker | ~0.036% | **Exit now.** Never risk the fill to save a fee. |
 
-Costo real medido = **fee + medio spread** por moneda (no asumir USDC siempre; usarlo donde rinde).
+Real measured cost = **fee + half spread** per coin (do not always assume USDC; use it
+where it pays off).
 
-> ⚠️ **Nunca sacrificar la certeza de ejecución de un stop por ahorrar comisión.** 0.036% es seguro barato contra una pérdida de 2%+.
+> **Never sacrifice the execution certainty of a stop to save a commission.** 0.036%
+> is cheap insurance against a loss of 2% or more.
