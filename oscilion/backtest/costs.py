@@ -1,11 +1,11 @@
-"""Modelo de costos reales (RISK_MODEL.md §7).
+"""Real cost model (RISK_MODEL.md section 7).
 
-Un backtest sin costos miente. Aquí entran:
-  • fees: maker (entrada/TP en límite) vs taker (stop/ruptura, urgente).
-  • slippage: deslizamiento al cruzar el libro (solo en taker).
-  • funding: el perp paga/cobra funding cada 8h mientras la posición vive.
+A backtest without costs lies. Included here:
+  - fees: maker (limit entry/TP) vs taker (stop/breakout, urgent).
+  - slippage: crossing the book (taker only).
+  - funding: the perpetual pays/receives funding every 8h while the position lives.
 
-Convención de funding: con tasa > 0 los LONG pagan y los SHORT cobran.
+Funding convention: with a rate > 0, LONGs pay and SHORTs receive.
 """
 from __future__ import annotations
 
@@ -16,45 +16,46 @@ from config import config
 
 @dataclass(frozen=True)
 class CostModel:
-    maker_fee: float = 0.0002          # 0.02% (límite post-only)
-    taker_fee: float = config.taker_fee  # 0.036% (mercado)
-    slippage_bps: float = 2.0          # 2 bps de deslizamiento en taker
+    maker_fee: float = 0.0002          # 0.02% (post-only limit)
+    taker_fee: float = config.taker_fee  # 0.036% (market)
+    slippage_bps: float = 2.0          # taker slippage
 
     def fee(self, notional: float, *, maker: bool) -> float:
         return abs(notional) * (self.maker_fee if maker else self.taker_fee)
 
     def fill_price(self, price: float, side: str, *, is_entry: bool, maker: bool) -> float:
-        """Precio efectivo de ejecución. Maker = sin slippage; taker = peor."""
+        """Effective fill price. Maker = no slippage; taker = worse price."""
         if maker:
             return price
         slip = price * self.slippage_bps / 10_000
-        # comprar (long entry / short exit) paga más caro; vender, más barato
+        # buying (long entry / short exit) pays more; selling receives less
         buying = (side == "long" and is_entry) or (side == "short" and not is_entry)
         return price + slip if buying else price - slip
 
     def round_trip_cost_r(self, stop_pct: float) -> float:
-        """Costo round-trip estimado en unidades de R para un stop a `stop_pct`.
+        """Estimated round-trip cost in R units for a stop at `stop_pct`.
 
-        Asume taker en entrada y salida (peor caso = el trade muere en el stop).
-        fees y slippage son ~constantes en precio, pero el notional (= riesgo/stop_pct)
-        crece al estrechar el stop, así que el costo en R domina con stops apretados:
-            cost_R = (2·taker_fee + slippage) / stop_pct
-        Coincide con la descomposición de `cost_audit` (r_fee_entry+r_fee_exit+r_slip).
+        Assumes taker on entry and exit (worst case = the trade dies at the stop).
+        Fees and slippage are ~constant in price terms, but the notional
+        (= risk / stop_pct) grows as the stop tightens, so the cost in R dominates
+        with tight stops:
+            cost_R = (2 * taker_fee + slippage) / stop_pct
+        Matches the `cost_audit` breakdown (r_fee_entry + r_fee_exit + r_slip).
         """
         if stop_pct <= 0:
             return float("inf")
         return (2 * self.taker_fee + self.slippage_bps / 10_000) / stop_pct
 
     def funding(self, notional: float, side: str, rate: float) -> float:
-        """Costo de funding (positivo = lo paga el trader)."""
+        """Funding cost (positive = paid by the trader)."""
         sign = 1.0 if side == "long" else -1.0
         return abs(notional) * rate * sign
 
     def realized(self, side: str, entry: float, exit_px: float, notional: float,
                  entry_fee: float, *, maker_exit: bool, funding_total: float = 0.0):
-        """PnL neto de un trade cerrado (FUENTE ÚNICA usada por engine y monitor):
-        fill de salida (slippage si taker) + fees ambos lados + funding.
-        Devuelve (pnl, exit_fill)."""
+        """Net PnL of a closed trade (SINGLE SOURCE used by the engine and monitor):
+        exit fill (slippage if taker) + fees on both sides + funding.
+        Returns (pnl, exit_fill)."""
         exit_fill = self.fill_price(exit_px, side, is_entry=False, maker=maker_exit)
         price_ret = (exit_fill - entry) / entry if side == "long" else (entry - exit_fill) / entry
         pnl = price_ret * notional - (entry_fee + self.fee(notional, maker=maker_exit)) - funding_total

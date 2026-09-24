@@ -1,13 +1,13 @@
-"""Métricas de backtest (Fase 4).
+"""Backtest metrics.
 
-Sobre una lista de trades cerrados (cada uno con: ret = pnl/equity_previo,
-pnl, mae, mfe, rr_realized, score, regime, exit_reason, entry_ts, exit_ts):
+On a list of closed trades (each with: ret = pnl / prior equity, pnl, mae, mfe,
+rr_realized, score, regime, exit_reason, entry_ts, exit_ts):
 
-  • trade_stats   — n, winrate, profit factor, expectancy, RR realizado, MAE/MFE.
-  • equity_curve  — equity compuesta en orden cronológico.
-  • sharpe        — anualizado sobre equity resampleada a diario.
-  • max_drawdown  — peor caída pico-valle.
-  • calibration   — winrate real por bucket de score (¿el score se cumple?).
+  - trade_stats:  n, winrate, profit factor, expectancy, realized RR, MAE/MFE.
+  - equity_curve: compounded equity in chronological order.
+  - sharpe:       annualized on equity resampled to daily.
+  - max_drawdown: worst peak-to-trough drop.
+  - calibration:  real winrate per score bucket (does the score hold up?).
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def trade_stats(trades: list[dict]) -> dict:
 
 
 def equity_curve(trades: list[dict], capital: float) -> pd.DataFrame:
-    """Equity compuesta tras cada trade (orden cronológico por exit_ts)."""
+    """Compounded equity after each trade (chronological by exit_ts)."""
     if not trades:
         return pd.DataFrame({"ts": [], "equity": []})
     df = pd.DataFrame(trades).sort_values("exit_ts")
@@ -58,7 +58,7 @@ def max_drawdown(equity: pd.Series | np.ndarray) -> float:
 
 
 def sharpe(curve: pd.DataFrame, periods_per_year: int = 365) -> float:
-    """Sharpe anualizado sobre retornos diarios de la equity."""
+    """Annualized Sharpe on daily equity returns."""
     if curve.empty or len(curve) < 3:
         return 0.0
     s = pd.Series(curve["equity"].to_numpy(),
@@ -71,7 +71,7 @@ def sharpe(curve: pd.DataFrame, periods_per_year: int = 365) -> float:
 
 
 def calibration(trades: list[dict], bucket: int = 10) -> list[dict]:
-    """Winrate real por bucket de score (0-10,10-20,...). Mide si el score se cumple."""
+    """Real winrate per score bucket (0-10, 10-20, ...). Measures whether the score holds up."""
     if not trades:
         return []
     df = pd.DataFrame(trades)

@@ -1,13 +1,13 @@
-"""Simulador de CARTERA (Fase B) — una sola cuenta gestionando todas las series.
+"""PORTFOLIO simulator: a single account managing every series.
 
-Toma los trades por serie (cada uno con su R neto y timestamps), y simula una
-cuenta única con: peso de convicción por serie, límite de posiciones concurrentes
-y límite por clúster de correlación (no apostar varias veces a lo mismo).
+Takes the trades per series (each with its net R and timestamps) and simulates a
+single account with: a conviction weight per series, a concurrent-position limit
+and a per-correlation-cluster limit (do not bet on the same thing twice).
 
-- Cada trade arriesga `risk_per_trade × weight_i` del equity vigente (respeta el
-  −2%/trade: weight ≤ 1). PnL = R_neto × riesgo_arriesgado.
-- Métrica de cartera: retorno, MaxDD y Sharpe REALES de la cuenta combinada.
-Honesto: el R por trade ya incluye costos; aquí solo se compone la cuenta.
+- Each trade risks `risk_per_trade * weight_i` of current equity (respects the
+  2%/trade cap: weight <= 1). PnL = net R * amount risked.
+- Portfolio metrics: REAL return, MaxDD and Sharpe of the combined account.
+Honest: per-trade R already includes costs; this only compounds the account.
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ def simulate(trades_by_series: dict[str, list[dict]], *, weights: dict[str, floa
              clusters: dict[str, str], capital: float = 10_000.0,
              max_concurrent: int = 3, max_per_cluster: int = 1,
              since_ts: int | None = None) -> PortfolioResult:
-    """trades_by_series: {series_key: [trade...]}. weights/clusters por series_key.
-    series_key se mapea a su `sym` vía el trade. `since_ts` filtra por entrada (OOS)."""
+    """trades_by_series: {series_key: [trade, ...]}. weights/clusters keyed by series_key.
+    `since_ts` filters by entry time (OOS)."""
     rows = []
     for key, trades in trades_by_series.items():
         for t in trades:
@@ -50,7 +50,7 @@ def simulate(trades_by_series: dict[str, list[dict]], *, weights: dict[str, floa
 
     equity = capital
     open_pos: list[dict] = []          # {exit_ts, pnl, cluster}
-    curve = []                          # (ts, equity) en cada cierre
+    curve = []                          # (ts, equity) at each close
     taken = skipped = 0
     by_series: dict[str, list[float]] = {}
 
@@ -63,7 +63,7 @@ def simulate(trades_by_series: dict[str, list[dict]], *, weights: dict[str, floa
             curve.append((o["exit_ts"], equity))
 
     for r in rows:
-        _close_due(r["entry_ts"])      # realiza salidas previas a esta entrada
+        _close_due(r["entry_ts"])      # realize exits that happen before this entry
         clusters_open = [o["cluster"] for o in open_pos]
         if len(open_pos) >= max_concurrent or clusters_open.count(r["cluster"]) >= max_per_cluster:
             skipped += 1
@@ -73,7 +73,7 @@ def simulate(trades_by_series: dict[str, list[dict]], *, weights: dict[str, floa
         open_pos.append({"exit_ts": r["exit_ts"], "pnl": pnl, "cluster": r["cluster"]})
         by_series.setdefault(r["key"], []).append(r["R"])
         taken += 1
-    _close_due(float("inf"))           # cierra lo que quede
+    _close_due(float("inf"))
 
     if not curve:
         return PortfolioResult(taken, skipped, 0.0, 0.0, 0.0, equity, {})

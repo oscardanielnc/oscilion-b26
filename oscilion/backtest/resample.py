@@ -1,8 +1,8 @@
-"""Resampleo causal de OHLCV a timeframes superiores (Fase de pruebas R1).
+"""Causal OHLCV resampling to higher timeframes.
 
-1h → 2h/4h por agregación estándar alineada a fronteras UTC. Se descarta el
-último bucket si está incompleto (no inventa una vela aún no cerrada → sin
-look-ahead). `ts` = open time del bucket (epoch ms).
+1h -> 2h/4h by standard aggregation aligned to UTC boundaries. Incomplete buckets
+are dropped (no invented, unclosed candle -> no look-ahead). `ts` = bucket open
+time (epoch ms).
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _H = 3_600_000
 
 
 def resample_ohlcv(df: pd.DataFrame, hours: int) -> pd.DataFrame:
-    """Agrega un df 1h (ts,open,high,low,close,volume) a `hours`-horas."""
+    """Aggregate a 1h df (ts,open,high,low,close,volume) into `hours`-hour bars."""
     if df.empty:
         return df.copy()
     factor = hours * _H
@@ -22,6 +22,6 @@ def resample_ohlcv(df: pd.DataFrame, hours: int) -> pd.DataFrame:
     out = g.agg(open=("open", "first"), high=("high", "max"), low=("low", "min"),
                 close=("close", "last"), volume=("volume", "sum"),
                 _n=("ts", "size")).reset_index()
-    out = out[out["_n"] == hours]               # solo buckets completos (sin look-ahead)
+    out = out[out["_n"] == hours]               # complete buckets only (no look-ahead)
     out = out.rename(columns={"bucket": "ts"}).drop(columns="_n")
     return out[["ts", "open", "high", "low", "close", "volume"]].reset_index(drop=True)

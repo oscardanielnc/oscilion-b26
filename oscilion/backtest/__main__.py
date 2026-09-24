@@ -1,14 +1,13 @@
-"""CLI de backtest (Fase 4).
+"""Backtest CLI.
 
-Uso:
+Usage:
     python -m oscilion.backtest [--tf 1h] [--capital 10000] [--symbols ...]
                                 [--min-score 0] [--regimes range,trend]
-                                [--max-hold 72] [--save report.md]
+                                [--max-hold 72] [--confirm] [--save report.md]
 """
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from config import config, DATA_DIR
@@ -19,10 +18,6 @@ from oscilion.logging_setup import setup_logging
 
 def main() -> None:
     setup_logging()
-    try:  # consolas Windows (cp1252) no manejan emojis del informe
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
     ap = argparse.ArgumentParser(prog="oscilion.backtest")
     ap.add_argument("--tf", default=config.base_timeframe)
     ap.add_argument("--capital", type=float, default=10_000.0)
@@ -30,7 +25,7 @@ def main() -> None:
     ap.add_argument("--min-score", type=float, default=0.0)
     ap.add_argument("--regimes", default="range,trend")
     ap.add_argument("--max-hold", type=int, default=72)
-    ap.add_argument("--confirm", action="store_true", help="exigir confirmación de giro (F5)")
+    ap.add_argument("--confirm", action="store_true", help="require turn confirmation")
     ap.add_argument("--save", default="")
     args = ap.parse_args()
 
@@ -47,7 +42,7 @@ def main() -> None:
     out.write_text(md, encoding="utf-8")
 
     print("\n" + md)
-    print(f"\n[guardado en {out}]")
+    print(f"\n[saved to {out}]")
 
 
 if __name__ == "__main__":
