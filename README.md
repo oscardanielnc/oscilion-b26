@@ -7,8 +7,9 @@ diagonal channel, waits for price to reach an edge, requires a **turn confirmati
 (a closed candle reversing with momentum) before entering, targets the opposite edge, and
 places the stop beyond the liquidity cluster plus an ATR buffer. When the data rejected
 that thesis it pivoted to a set of directional strategies, and those were run live in
-dry-run for eight weeks. The answer was no. The project was closed at v1.0, and the
-go/no-go criteria that had been written before any code are what closed it.
+dry-run for eight weeks. The answer was no. The project was closed at v1.0 by the go/no-go
+criteria in [VISION](docs/VISION.md), which went into the first commit, before any signal or
+backtest code existed.
 
 ## Status
 
@@ -33,7 +34,8 @@ and the SQLite database are not (they are gitignored and can be regenerated).
 
 The headline number from the early work is a Sharpe ratio that went from **-0.47 to +1.89**
 when turn confirmation was added to the reversion entry, on **1h candles over about 120
-days** of BTC (winrate 28% -> 40%, profit factor 0.87 -> 1.22). **That result was never
+days** of data (winrate 28% -> 40%, profit factor 0.87 -> 1.22; the default universe at
+the time was BTC, ETH and SOL). **That result was never
 confirmed.** It came from a single short window, it still failed the project's own
 go/no-go bar (PF 1.22 < 1.3), and the roadmap recorded it at the time as "promising, not
 confirmed, multi-year validation pending." It is reported here because it is the kind of
