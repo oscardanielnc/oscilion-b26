@@ -1,1 +1,1 @@
-"""Persistencia append-only y auditable (ver ARCHITECTURE.md §5)."""
+"""Append-only, auditable persistence (see ARCHITECTURE.md section 5)."""

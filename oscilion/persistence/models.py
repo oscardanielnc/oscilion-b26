@@ -1,65 +1,65 @@
-"""Esquema de la base de datos (ARCHITECTURE.md §5).
+"""Database schema (ARCHITECTURE.md section 5).
 
-Principio: **append-only y auditable**. Nunca se sobreescribe ni se borra
-(salvo `calibration`, que es un agregado recomputable). Cada tabla lleva
-`created_at` (epoch ms, hora de inserción) además del `ts` lógico del evento.
+Principle: **append-only and auditable**. Event rows are never overwritten or
+deleted; only the aggregate/current-state tables (`forward_results`,
+`ohlcv_status`, `monitor_state`, `calibration`) are upserted. Every event table
+has `created_at` (epoch ms, insertion time) besides the event's logical `ts`.
 
-El esquema se versiona vía `SCHEMA_VERSION`; las migraciones futuras se
-añadirán como sentencias idempotentes.
+The schema is versioned through `SCHEMA_VERSION`; migrations are idempotent
+statements in `MIGRATIONS`.
 """
 from __future__ import annotations
 
 SCHEMA_VERSION = 6
 
-# Cada entrada: CREATE TABLE IF NOT EXISTS idempotente.
 TABLES: dict[str, str] = {
-    # Estado del mercado en cada tick.
+    # Market state per tick. Reserved: nothing writes it yet.
     "market_snapshots": """
         CREATE TABLE IF NOT EXISTS market_snapshots (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts          INTEGER NOT NULL,          -- epoch ms del snapshot
+            ts          INTEGER NOT NULL,          -- snapshot epoch ms
             sym         TEXT    NOT NULL,
             price       REAL,
-            ohlcv_ref   TEXT,                      -- ref/hash a las barras usadas
+            ohlcv_ref   TEXT,                      -- ref/hash of the bars used
             indicators  TEXT,                      -- JSON: ATR, BB, ADX, ...
             created_at  INTEGER NOT NULL
         )
     """,
-    # Lo que el sistema "creía" en ese instante.
+    # What the system "believed" at that moment.
     "predictions": """
         CREATE TABLE IF NOT EXISTS predictions (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             ts          INTEGER NOT NULL,
             sym         TEXT    NOT NULL,
-            score       REAL,                      -- convicción 0-100
+            score       REAL,                      -- conviction 0-100
             range_lo    REAL,
             range_hi    REAL,
             regime      TEXT,                      -- range | trend | chaos
             stop        REAL,
             tp          REAL,
-            rr          REAL,                      -- risk/reward esperado
+            rr          REAL,                      -- expected risk/reward
             leverage    REAL,
-            components  TEXT,                      -- JSON: desglose del score
+            components  TEXT,                      -- JSON: score breakdown
             created_at  INTEGER NOT NULL
         )
     """,
-    # Qué se decidió y por qué.
+    # What was decided and why.
     "decisions": """
         CREATE TABLE IF NOT EXISTS decisions (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             ts          INTEGER NOT NULL,
             sym         TEXT    NOT NULL,
-            action      TEXT    NOT NULL,          -- entrar | esperar | no-operar | salir
+            action      TEXT    NOT NULL,          -- enter | enter-observe | wait | no-trade
             reason      TEXT,
-            prediction_id INTEGER,                 -- FK lógica a predictions.id
+            prediction_id INTEGER,                 -- logical FK to predictions.id
             created_at  INTEGER NOT NULL
         )
     """,
-    # Operaciones reales / paper.
+    # Trades (dry-run / paper; live was never implemented).
     "trades": """
         CREATE TABLE IF NOT EXISTS trades (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts          INTEGER NOT NULL,          -- apertura (epoch ms)
+            ts          INTEGER NOT NULL,          -- open time (epoch ms)
             sym         TEXT    NOT NULL,
             side        TEXT    NOT NULL,          -- long | short
             mode        TEXT    NOT NULL,          -- dry-run | paper | live
@@ -67,7 +67,7 @@ TABLES: dict[str, str] = {
             stop        REAL,
             tp          REAL,
             leverage    REAL,
-            size        REAL,                      -- notional / contratos
+            size        REAL,                      -- notional / contracts
             exit        REAL,
             exit_ts     INTEGER,
             pnl         REAL,
@@ -75,15 +75,15 @@ TABLES: dict[str, str] = {
             funding     REAL,
             status      TEXT    NOT NULL DEFAULT 'open',  -- open | closed
             strategy    TEXT,                      -- ema_trend_stack | orb_breakout | ...
-            r_multiple  REAL,                      -- pnl en unidades de riesgo (R)
-            observe     INTEGER NOT NULL DEFAULT 0, -- 1 = forward-test sin capital (no cuenta en PnL)
+            r_multiple  REAL,                      -- pnl in risk units (R)
+            observe     INTEGER NOT NULL DEFAULT 0, -- 1 = forward test without capital (excluded from PnL)
             exit_reason TEXT,                      -- stop | tp | timeout | ...
-            cost_audit  TEXT,                      -- JSON: R descompuesto (precio/slip/fees/funding)
+            cost_audit  TEXT,                      -- JSON: R broken down (price/slip/fees/funding)
             created_at  INTEGER NOT NULL
         )
     """,
-    # Validación forward (Fase A): por (sym, strategy, scope) — el LOG conciso
-    # que responde keep/remove/fix/improve. backtest vs forward (datos no vistos).
+    # Forward validation per (sym, strategy, scope): the concise log that answers
+    # keep/remove/fix/improve. Backtest vs forward (unseen data).
     "forward_results": """
         CREATE TABLE IF NOT EXISTS forward_results (
             sym         TEXT    NOT NULL,
@@ -91,14 +91,14 @@ TABLES: dict[str, str] = {
             scope       TEXT    NOT NULL,          -- backtest | forward
             n           INTEGER NOT NULL DEFAULT 0,
             win_rate    REAL,
-            exp_r       REAL,                      -- expectativa por trade en R
+            exp_r       REAL,                      -- expectancy per trade in R
             sum_r       REAL,
             last_entry_ts INTEGER,
             updated_at  INTEGER NOT NULL,
             PRIMARY KEY (sym, strategy, scope)
         )
     """,
-    # Configuración usada (reproducibilidad).
+    # Configuration in use (reproducibility).
     "params": """
         CREATE TABLE IF NOT EXISTS params (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,17 +108,17 @@ TABLES: dict[str, str] = {
             created_at  INTEGER NOT NULL
         )
     """,
-    # Score predicho vs resultado (agregado recomputable).
+    # Predicted score vs outcome (recomputable aggregate). Reserved: nothing writes it yet.
     "calibration": """
         CREATE TABLE IF NOT EXISTS calibration (
-            bucket_score INTEGER PRIMARY KEY,      -- p.ej. 0,10,...,90
+            bucket_score INTEGER PRIMARY KEY,      -- e.g. 0,10,...,90
             n            INTEGER NOT NULL DEFAULT 0,
             hits         INTEGER NOT NULL DEFAULT 0,
             ratio_real   REAL,
             updated_at   INTEGER NOT NULL
         )
     """,
-    # Errores, reinicios, alertas (auditoría operativa).
+    # Errors, restarts, alerts (operational audit).
     "events": """
         CREATE TABLE IF NOT EXISTS events (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,12 +126,12 @@ TABLES: dict[str, str] = {
             level       TEXT    NOT NULL,          -- INFO | WARN | ERROR | CRITICAL
             module      TEXT,
             msg         TEXT    NOT NULL,
-            extra       TEXT,                      -- JSON opcional
+            extra       TEXT,                      -- optional JSON
             created_at  INTEGER NOT NULL
         )
     """,
-    # Estado/auditoría del histórico descargado (Fase 2). Agregado upsert
-    # por (exchange, sym, tf): el detalle vive en parquet; aquí el resumen.
+    # Audit of the downloaded history. Upserted per (exchange, sym, tf, source):
+    # the bars live in parquet, this is the summary.
     "ohlcv_status": """
         CREATE TABLE IF NOT EXISTS ohlcv_status (
             exchange    TEXT    NOT NULL,
@@ -147,9 +147,9 @@ TABLES: dict[str, str] = {
             PRIMARY KEY (exchange, sym, tf, source)
         )
     """,
-    # Estado del monitor en vivo (current-state, upsert) — para sobrevivir reinicios:
-    # posiciones virtuales abiertas + cursores por (sym|strategy). Sin esto, un
-    # Restart=always perdería las posiciones y dejaría huecos en el forward-test.
+    # Live monitor state (current state, upsert) to survive restarts: open virtual
+    # positions + cursors per (sym|strategy). Without it, Restart=always would lose
+    # positions and leave holes in the forward test.
     "monitor_state": """
         CREATE TABLE IF NOT EXISTS monitor_state (
             key         TEXT PRIMARY KEY,         -- "<sym>|<strategy>"
@@ -157,27 +157,27 @@ TABLES: dict[str, str] = {
             updated_at  INTEGER NOT NULL
         )
     """,
-    # Snapshot conciso de lo que el OBSERVADOR ve por ciclo, por (sym, strategy).
-    # Append-only: deja rastro de "qué vio el bot cada ciclo" (estado, dirección,
-    # progreso del checklist) — consultable a diario aunque NO haya señal/trade.
-    # Se persiste por cadencia (~horaria) + en cada cambio (alerta).
+    # Concise snapshot of what the monitor sees each cycle, per (sym, strategy).
+    # Append-only: records what the bot saw (state, direction, checklist progress)
+    # even when there is no signal or trade. Written on a cadence (~hourly) and on
+    # every change (alert).
     "series_snapshots": """
         CREATE TABLE IF NOT EXISTS series_snapshots (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts          INTEGER NOT NULL,          -- epoch ms del snapshot
+            ts          INTEGER NOT NULL,          -- snapshot epoch ms
             sym         TEXT    NOT NULL,
             strategy    TEXT    NOT NULL,
-            state       TEXT    NOT NULL,          -- esperando | activa | en_trade
+            state       TEXT    NOT NULL,          -- waiting | active | in_trade
             direction   TEXT,                      -- long | short | neutral
             price       REAL,
-            checklist_ok    INTEGER,               -- criterios cumplidos
-            checklist_total INTEGER,               -- criterios totales
-            signal_active   INTEGER NOT NULL DEFAULT 0,  -- 0/1 candidato listo
-            in_trade        INTEGER NOT NULL DEFAULT 0,  -- 0/1 posición abierta
+            checklist_ok    INTEGER,               -- criteria met
+            checklist_total INTEGER,               -- total criteria
+            signal_active   INTEGER NOT NULL DEFAULT 0,  -- 0/1 candidate ready
+            in_trade        INTEGER NOT NULL DEFAULT 0,  -- 0/1 position open
             created_at  INTEGER NOT NULL
         )
     """,
-    # Control interno de versión de esquema.
+    # Internal schema version tracking.
     "schema_meta": """
         CREATE TABLE IF NOT EXISTS schema_meta (
             key        TEXT PRIMARY KEY,
@@ -187,18 +187,18 @@ TABLES: dict[str, str] = {
     """,
 }
 
-# Migraciones idempotentes (ALTER) para BDs existentes. Se ejecutan ignorando
-# el error "duplicate column" si ya están aplicadas.
+# Idempotent migrations (ALTER) for existing DBs. The "duplicate column" error is
+# ignored when they were already applied.
 MIGRATIONS: list[str] = [
     "ALTER TABLE trades ADD COLUMN strategy TEXT",
     "ALTER TABLE trades ADD COLUMN r_multiple REAL",
-    # v6 — gate observe + auditoría de costes de salida (FORWARD_REVIEW #1/#3)
+    # v6: observe gate + exit cost audit (FORWARD_REVIEW #1/#3)
     "ALTER TABLE trades ADD COLUMN observe INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE trades ADD COLUMN exit_reason TEXT",
     "ALTER TABLE trades ADD COLUMN cost_audit TEXT",
 ]
 
-# Índices para consultas frecuentes (frontend / calibración).
+# Indexes for frequent queries (dashboard).
 INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS ix_snapshots_sym_ts ON market_snapshots(sym, ts)",
     "CREATE INDEX IF NOT EXISTS ix_predictions_sym_ts ON predictions(sym, ts)",

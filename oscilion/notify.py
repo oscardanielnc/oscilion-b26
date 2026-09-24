@@ -1,9 +1,7 @@
-"""Notificaciones / alertas (esqueleto Fase 1).
+"""Notifications / alerts.
 
-Canal único hoy: log + persistencia en `events`. Si hay credenciales de
-Telegram en config, envía también por ahí (best-effort, nunca lanza).
-Los 3 momentos de negocio (ENTRA / TOMA GANANCIA / SAL) usarán `notify()`
-en fases posteriores sin cambiar esta interfaz.
+Always: log + persistence in `events`. If configured, also pushes to ntfy.sh
+and/or Telegram (best-effort, never raises).
 """
 from __future__ import annotations
 
@@ -18,7 +16,7 @@ _LEVELS = {"INFO", "WARN", "ERROR", "CRITICAL"}
 
 
 def notify(msg: str, level: str = "INFO", module: str = "notify", extra: dict | None = None) -> None:
-    """Registra y, si se puede, despacha una alerta. Best-effort, no lanza."""
+    """Record and, when possible, dispatch an alert. Best-effort, never raises."""
     level = level.upper()
     if level not in _LEVELS:
         level = "INFO"
@@ -39,10 +37,10 @@ def _send_ntfy(text: str, level: str) -> None:
         prio = {"CRITICAL": "5", "ERROR": "4", "WARN": "3"}.get(level, "3")
         requests.post(f"https://ntfy.sh/{config.ntfy_topic}",
                       data=text.encode("utf-8"),
-                      headers={"Title": "Oscilion", "Priority": prio, "Tags": "chart_with_upwards_trend"},
+                      headers={"Title": "Oscilion", "Priority": prio},
                       timeout=10)
     except Exception:
-        log.exception("No se pudo enviar alerta por ntfy")
+        log.exception("Could not send ntfy alert")
 
 
 def _log_level(level: str) -> int:
@@ -60,4 +58,4 @@ def _send_telegram(text: str) -> None:
             timeout=10,
         )
     except Exception:
-        log.exception("No se pudo enviar alerta por Telegram")
+        log.exception("Could not send Telegram alert")

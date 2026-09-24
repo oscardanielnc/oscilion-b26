@@ -1,11 +1,12 @@
-"""Conexión SQLite, migraciones idempotentes y API de escritura append-only.
+"""SQLite connection, idempotent migrations and the append-only write API.
 
-- WAL + connexión compartida thread-safe (lock) → el orquestador y la API
-  pueden leer/escribir sin pisarse.
-- Solo se exponen `log_*` (INSERT). No hay update/delete de eventos: la
-  auditoría es inviolable. `calibration` es la única con upsert (agregado).
-- Cada `log_*` es defensivo: si la DB falla, NO debe tumbar el tick (devuelve
-  None y deja rastro en el logger), porque la resiliencia manda.
+- WAL + a shared thread-safe connection (lock), so the orchestrator and the API
+  can read/write without stepping on each other.
+- Event tables are only written through `log_*` (INSERT). There is no
+  update/delete of events: the audit trail is inviolable. Only aggregate and
+  current-state tables are upserted.
+- Every write is defensive: a DB failure must NOT bring the tick down (it
+  returns None and leaves a trace in the logger). Resilience comes first.
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ def _now_ms() -> int:
 
 
 def get_connection() -> sqlite3.Connection:
-    """Conexión única (lazy), con WAL y FK activadas."""
+    """Single lazy connection, with WAL and foreign keys enabled."""
     global _conn
     if _conn is None:
         with _lock:
@@ -45,14 +46,14 @@ def get_connection() -> sqlite3.Connection:
                 _conn.execute("PRAGMA journal_mode=WAL")
                 _conn.execute("PRAGMA synchronous=NORMAL")
                 _conn.execute("PRAGMA foreign_keys=ON")
-                # API y orquestador son 2 procesos sobre la misma BD: esperar en
-                # vez de fallar con SQLITE_BUSY si coinciden escritura/lectura.
+                # API and orchestrator are two processes on the same DB: wait
+                # instead of failing with SQLITE_BUSY when a read and write collide.
                 _conn.execute("PRAGMA busy_timeout=5000")
     return _conn
 
 
 def init_db() -> None:
-    """Crea tablas e índices (idempotente) y registra la versión de esquema."""
+    """Create tables and indexes (idempotent) and record the schema version."""
     conn = get_connection()
     with _lock:
         for ddl in models.TABLES.values():
@@ -61,7 +62,7 @@ def init_db() -> None:
             try:
                 conn.execute(alter)
             except Exception:
-                pass  # columna ya existe (migración idempotente)
+                pass  # column already exists (idempotent migration)
         for idx in models.INDEXES:
             conn.execute(idx)
         conn.execute(
@@ -69,14 +70,14 @@ def init_db() -> None:
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
             (str(models.SCHEMA_VERSION), _now_ms()),
         )
-    log.info("DB lista en %s (schema v%d)", DB_PATH, models.SCHEMA_VERSION)
+    log.info("DB ready at %s (schema v%d)", DB_PATH, models.SCHEMA_VERSION)
 
 
 def _insert(table: str, data: dict[str, Any]) -> Optional[int]:
-    """INSERT genérico, defensivo con reintentos. Devuelve el id o None.
+    """Generic defensive INSERT with retries. Returns the row id or None.
 
-    Reintenta ante 'database is locked' (contención entre procesos) además del
-    PRAGMA busy_timeout, para NO perder registros críticos (trades/alertas).
+    Retries on 'database is locked' (cross-process contention) on top of
+    PRAGMA busy_timeout, so critical rows (trades/alerts) are not lost.
     """
     data = {**data, "created_at": _now_ms()}
     cols = ", ".join(data.keys())
@@ -92,10 +93,10 @@ def _insert(table: str, data: dict[str, Any]) -> Optional[int]:
             if "locked" in str(e).lower() and attempt < 3:
                 time.sleep(0.5 * (attempt + 1))
                 continue
-            log.error("INSERT %s falló (locked) tras reintentos: %s", table, e)
+            log.error("INSERT %s failed (locked) after retries: %s", table, e)
             return None
-        except Exception:  # nunca tumbar el tick por un fallo de persistencia
-            log.exception("Fallo al insertar en %s", table)
+        except Exception:  # a persistence failure must never bring the tick down
+            log.exception("Insert into %s failed", table)
             return None
     return None
 
@@ -106,17 +107,7 @@ def _jdump(obj: Any) -> Optional[str]:
     return json.dumps(obj, default=str, separators=(",", ":"))
 
 
-# --------------------------- API append-only ---------------------------
-def log_snapshot(
-    sym: str, price: float | None = None, *, ts: int | None = None,
-    ohlcv_ref: str | None = None, indicators: dict | None = None,
-) -> Optional[int]:
-    return _insert(
-        "market_snapshots",
-        dict(ts=ts or _now_ms(), sym=sym, price=price,
-             ohlcv_ref=ohlcv_ref, indicators=_jdump(indicators)),
-    )
-
+# -------------------------- append-only API --------------------------
 
 def log_series_snapshot(
     sym: str, strategy: str, *, state: str, direction: str | None = None,
@@ -124,7 +115,7 @@ def log_series_snapshot(
     checklist_total: int | None = None, signal_active: bool = False,
     in_trade: bool = False, ts: int | None = None,
 ) -> Optional[int]:
-    """Snapshot conciso por ciclo de lo que ve el observador (append-only)."""
+    """Concise per-cycle snapshot of what the monitor sees (append-only)."""
     return _insert(
         "series_snapshots",
         dict(ts=ts or _now_ms(), sym=sym, strategy=strategy, state=state,
@@ -168,9 +159,9 @@ def log_trade(sym: str, side: str, mode: str, **f: Any) -> Optional[int]:
 
 
 def capital_pnl_since(since_ms: int) -> float:
-    """PnL cerrado de trades CON CAPITAL (observe=0) desde `since_ms`.
-    Lo usa el freno diario; ante fallo devuelve 0.0 (no frena por error de BD,
-    el breaker de errores ya cubre ese caso)."""
+    """Closed PnL of trades WITH CAPITAL (observe=0) since `since_ms`.
+    Used by the daily brake. Returns 0.0 on failure: a DB error must not trigger
+    the brake (the error circuit breaker already covers that case)."""
     try:
         with _lock:
             row = get_connection().execute(
@@ -179,13 +170,13 @@ def capital_pnl_since(since_ms: int) -> float:
             ).fetchone()
         return float(row[0] or 0.0)
     except Exception:
-        log.exception("Fallo capital_pnl_since")
+        log.exception("capital_pnl_since failed")
         return 0.0
 
 
 def get_forward_result(sym: str, strategy: str, scope: str) -> Optional[dict]:
-    """Stats persistidas del motor honesto para un scope ('backtest' | 'forward').
-    None si aún no hay snapshot (forward.refresh no corrió)."""
+    """Persisted stats of the honest engine for a scope ('backtest' | 'forward').
+    None if there is no snapshot yet (forward.refresh has not run)."""
     try:
         with _lock:
             row = get_connection().execute(
@@ -195,28 +186,30 @@ def get_forward_result(sym: str, strategy: str, scope: str) -> Optional[dict]:
             ).fetchone()
         return dict(row) if row else None
     except Exception:
-        log.exception("Fallo get_forward_result %s %s %s", sym, strategy, scope)
+        log.exception("get_forward_result failed %s %s %s", sym, strategy, scope)
         return None
 
 
 def get_forward_backtest(sym: str, strategy: str) -> Optional[dict]:
-    """Stats del backtest LOCAL (OOS) para el gate. None → el gate bloquea."""
+    """LOCAL (OOS) backtest stats for the gate. None means the gate blocks."""
     return get_forward_result(sym, strategy, "backtest")
 
 
 def real_forward_stats(sym: str, strategy: str, since_ms: int | None = None) -> Optional[dict]:
-    """Stats del LIBRO REAL (tabla trades, capital+observe) para el gate adaptativo.
+    """Stats of the REAL book (trades table, capital + observe) for the adaptive gate.
 
-    Auditoría 07-02: el scope 'forward' de forward_results es una SIMULACIÓN del
-    motor con las reglas actuales sobre el histórico — puede divergir del libro
-    (XAU momentum: +1.35 simulado vs −2.47R real) porque simula entradas que el
-    monitor nunca tomó (vetos, límites de cartera, downtime) y omite las que sí.
-    Kill-switch y graduación deben decidir con lo que REALMENTE pasó en la mesa.
+    Audit 07-02: the 'forward' scope in forward_results is a SIMULATION of the
+    engine with the current rules over history. It can diverge from the book
+    (XAU momentum: +1.35 simulated vs -2.47R real) because it simulates entries
+    the monitor never took (vetoes, portfolio limits, downtime) and misses others.
+    Kill-switch and graduation must decide on what REALLY happened.
 
-    Incluye observe (es justo la evidencia de graduación; r_multiple es comparable).
-    `since_ms` acota a la era de reglas vigente (config.gate_real_fw_from_ms) para
-    no matar un combo por pérdidas de una era anterior del motor.
-    None si no hay trades cerrados (el gate cae al backtest) o ante fallo de BD.
+    Includes observe trades (they are exactly the graduation evidence; r_multiple
+    is comparable). `since_ms` limits the window to the current rules era
+    (config.gate_real_fw_from_ms) so a combo is not killed for losses from an
+    earlier engine version.
+    None if there are no closed trades (the gate falls back to the backtest) or
+    on DB failure.
     """
     from config import config
     since = config.gate_real_fw_from_ms if since_ms is None else since_ms
@@ -233,7 +226,7 @@ def real_forward_stats(sym: str, strategy: str, since_ms: int | None = None) -> 
             return None
         return dict(row)
     except Exception:
-        log.exception("Fallo real_forward_stats %s %s", sym, strategy)
+        log.exception("real_forward_stats failed %s %s", sym, strategy)
         return None
 
 
@@ -252,7 +245,7 @@ def upsert_ohlcv_status(
     first_ts: int | None, last_ts: int | None,
     rows: int, gaps: int = 0, dupes: int = 0,
 ) -> None:
-    """Resumen auditable del histórico por (exchange, sym, tf, source)."""
+    """Auditable summary of the history per (exchange, sym, tf, source)."""
     try:
         with _lock:
             get_connection().execute(
@@ -265,30 +258,13 @@ def upsert_ohlcv_status(
                 (exchange, sym, tf, source, first_ts, last_ts, rows, gaps, dupes, _now_ms()),
             )
     except Exception:
-        log.exception("Fallo al upsert ohlcv_status %s %s %s", sym, tf, source)
-
-
-def update_calibration(bucket_score: int, hit: bool) -> None:
-    """Acumula resultado real por bucket de score (forward-test, Fase 5)."""
-    try:
-        with _lock:
-            get_connection().execute(
-                "INSERT INTO calibration (bucket_score, n, hits, ratio_real, updated_at)"
-                " VALUES (?, 1, ?, ?, ?)"
-                " ON CONFLICT(bucket_score) DO UPDATE SET"
-                "  n = n + 1, hits = hits + excluded.hits,"
-                "  ratio_real = CAST(hits + excluded.hits AS REAL) / (n + 1),"
-                "  updated_at = excluded.updated_at",
-                (int(bucket_score), 1 if hit else 0, 1.0 if hit else 0.0, _now_ms()),
-            )
-    except Exception:
-        log.exception("Fallo update_calibration bucket=%s", bucket_score)
+        log.exception("ohlcv_status upsert failed %s %s %s", sym, tf, source)
 
 
 def upsert_forward_result(sym: str, strategy: str, scope: str, *, n: int,
                           win_rate: float | None, exp_r: float | None,
                           sum_r: float | None, last_entry_ts: int | None) -> None:
-    """Snapshot conciso de validación (backtest vs forward) por sym×strategy."""
+    """Concise validation snapshot (backtest vs forward) per sym x strategy."""
     try:
         with _lock:
             get_connection().execute(
@@ -302,11 +278,11 @@ def upsert_forward_result(sym: str, strategy: str, scope: str, *, n: int,
                 (sym, strategy, scope, n, win_rate, exp_r, sum_r, last_entry_ts, _now_ms()),
             )
     except Exception:
-        log.exception("Fallo upsert_forward_result %s %s %s", sym, strategy, scope)
+        log.exception("upsert_forward_result failed %s %s %s", sym, strategy, scope)
 
 
 def save_monitor_state(key: str, state: dict) -> None:
-    """Persiste el estado de una serie del monitor (upsert)."""
+    """Persist the state of one monitor series (upsert)."""
     try:
         with _lock:
             get_connection().execute(
@@ -315,11 +291,11 @@ def save_monitor_state(key: str, state: dict) -> None:
                 (key, _jdump(state) or "{}", _now_ms()),
             )
     except Exception:
-        log.exception("Fallo save_monitor_state %s", key)
+        log.exception("save_monitor_state failed %s", key)
 
 
 def load_monitor_states() -> dict[str, dict]:
-    """Rehidrata el estado del monitor tras un reinicio."""
+    """Rehydrate the monitor state after a restart."""
     out: dict[str, dict] = {}
     try:
         with _lock:
@@ -330,12 +306,12 @@ def load_monitor_states() -> dict[str, dict]:
             except Exception:
                 pass
     except Exception:
-        log.exception("Fallo load_monitor_states")
+        log.exception("load_monitor_states failed")
     return out
 
 
 def counts() -> dict[str, int]:
-    """Conteo de filas por tabla (para /status del API y diagnósticos)."""
+    """Row count per table (for the API /status endpoint and diagnostics)."""
     out: dict[str, int] = {}
     with _lock:
         conn = get_connection()
@@ -348,8 +324,8 @@ def counts() -> dict[str, int]:
 
 
 def backup_db(keep: int = 7) -> str | None:
-    """Snapshot consistente de la BD (track record forward) a data/backups/.
-    Usa VACUUM INTO (atómico). Conserva los últimos `keep`. Devuelve la ruta."""
+    """Consistent DB snapshot (forward track record) into data/backups/.
+    Uses VACUUM INTO (atomic). Keeps the last `keep`. Returns the path."""
     try:
         bdir = Path(DB_PATH).parent / "backups"
         bdir.mkdir(parents=True, exist_ok=True)
@@ -359,12 +335,12 @@ def backup_db(keep: int = 7) -> str | None:
         with _lock:
             get_connection().execute("VACUUM INTO ?", (str(dest),))
         backups = sorted(bdir.glob("oscilion-*.db"))
-        for old in backups[:-keep]:                 # podar antiguos
+        for old in backups[:-keep]:
             old.unlink(missing_ok=True)
-        log.info("backup BD -> %s", dest.name)
+        log.info("DB backup -> %s", dest.name)
         return str(dest)
     except Exception:
-        log.exception("Fallo backup_db")
+        log.exception("backup_db failed")
         return None
 
 

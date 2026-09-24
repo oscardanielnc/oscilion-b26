@@ -1,6 +1,6 @@
-"""Oscilion — bot de trading intradía de cripto por reversión en rangos.
+"""Oscilion: intraday crypto trading research bot (range reversion on perpetuals).
 
-Paquete principal. Ver docs/ARCHITECTURE.md para la estructura completa.
+Main package. See docs/ARCHITECTURE.md for the full structure.
 """
 
 __version__ = "0.6.0-pilot"
