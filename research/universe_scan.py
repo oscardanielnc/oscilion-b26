@@ -1,19 +1,19 @@
-"""Barrido de universo — buscar combos GANADORES out-of-sample (2026-06-22).
+"""Universe sweep: look for combos that WIN out-of-sample (2026-06-22).
 
-Aplica la config FIJA validada de cada estrategia a TODAS las monedas con histórico
-(sin re-tunear por moneda = sin sobreajuste) y juzga por edge OOS robusto en DOS
-regímenes independientes:
-    - OOS holdout  : entradas >= 2025-01-01 (nunca usado para fijar params).
-    - 2026-YTD     : entradas >= 2026-01-01 (régimen más reciente).
-Un combo es GANADOR si exp_R >= MIN_EDGE en AMBOS y n_oos >= MIN_N. Doble régimen
-positivo ⇒ no es suerte de una ventana.
+Applies each strategy's FIXED validated config to EVERY coin with history (no
+per-coin re-tuning = no overfitting) and judges by robust OOS edge in TWO
+independent regimes:
+    - OOS holdout : entries >= 2025-01-01 (never used to set params).
+    - 2026-YTD    : entries >= 2026-01-01 (most recent regime).
+A combo is a WINNER if exp_R >= MIN_EDGE in BOTH and n_oos >= MIN_N. Positive in
+both regimes => not the luck of one window.
 
-Salida 1h (screen ancho, todas las monedas) o 15m (rigor pleno, solo las que tienen
-15m). El capital solo se despliega sobre combos validados con 15m (ver --tf 15m).
+1h exit (wide screen, every coin) or 15m (full rigor, only coins with 15m data).
+Capital is only deployed on combos validated with 15m (see --tf 15m).
 
-Uso:
-    python -m research.universe_scan            # screen 1h, todas
-    python -m research.universe_scan --tf 15m   # rigor 15m (solo monedas con 15m)
+Usage:
+    python -m research.universe_scan            # 1h screen, every coin
+    python -m research.universe_scan --tf 15m   # 15m rigor (only coins with 15m)
     python -m research.universe_scan --tf 15m --syms BTC,ETH,...
 """
 from __future__ import annotations
@@ -36,11 +36,11 @@ _H = 3_600_000
 SPLIT = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
 Y2026 = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
 
-MIN_EDGE = 0.10        # exp_R mínimo por trade en cada régimen OOS
-MIN_N = 30             # n mínimo de trades OOS holdout
-MIN_N_2026 = 12        # n mínimo en el corte 2026 (más corto)
+MIN_EDGE = 0.10        # minimum exp_R per trade in each OOS regime
+MIN_N = 30             # minimum OOS holdout trades
+MIN_N_2026 = 12        # minimum trades in the 2026 slice (shorter)
 
-# Config FIJA por estrategia (validada; NO se re-tunea por moneda) + max_hold (barras señal).
+# FIXED config per strategy (validated; NOT re-tuned per coin) + max_hold (signal bars).
 CANON = {
     "ema_trend_stack": (dict(atr_mult_sl=1.5, tp_r=4.0, fresh_gate=True,
                              session_filter=True, rsi_filter=False), 30),
@@ -101,10 +101,6 @@ def is_winner(r):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
     tf = "1h"
     syms_filter = None
     if "--tf" in sys.argv:
@@ -117,15 +113,15 @@ def main():
     if syms_filter:
         syms = [s for s in syms if s.split("/")[0] in syms_filter]
 
-    print(f"Universe scan · tf_salida={tf} · {len(syms)} monedas × {len(strategies)} estrategias "
-          f"· filtro: OOS>={MIN_EDGE} Y 2026>={MIN_EDGE}, n_oos>={MIN_N}\n")
+    print(f"Universe scan | exit_tf={tf} | {len(syms)} coins x {len(strategies)} strategies "
+          f"| filter: OOS>={MIN_EDGE} AND 2026>={MIN_EDGE}, n_oos>={MIN_N}\n")
     winners = []
     rows = []
     for strat in strategies:
         for sym in syms:
             try:
                 r = scan(strat, sym, tf)
-            except Exception as e:
+            except Exception:
                 continue
             if r is None:
                 continue
@@ -135,7 +131,7 @@ def main():
                 winners.append(r)
 
     winners.sort(key=lambda r: -(r["oos"]["exp_R"] + r["y2026"]["exp_R"]))
-    print(f"=== GANADORES (doble régimen OOS) : {len(winners)} ===")
+    print(f"=== WINNERS (both OOS regimes): {len(winners)} ===")
     print(f"{'COMBO':<28}{'full n/expR':<15}{'OOS n/expR':<15}{'2026 n/expR':<15}{'OOS wr'}")
     for r in winners:
         c = f"{r['sym'].split('/')[0]} {r['strat']}"
@@ -143,11 +139,11 @@ def main():
               f"{r['oos']['n']}/{r['oos']['exp_R']:+.3f}    "
               f"{r['y2026']['n']}/{r['y2026']['exp_R']:+.3f}    {r['oos']['wr']*100:.0f}%")
 
-    # también: combos actuales del portfolio que FALLAN el filtro (para podar)
+    # also: current portfolio combos that FAIL the filter (candidates to prune)
     from oscilion.strategies.assignment import PORTFOLIO
     cur = {(s.split("/")[0], a.strategy) for s, lst in PORTFOLIO.items() for a in lst}
     win_keys = {(r["sym"].split("/")[0], r["strat"]) for r in winners}
-    print(f"\n=== PORTFOLIO ACTUAL que NO pasa el filtro (candidato a podar) ===")
+    print("\n=== CURRENT PORTFOLIO combos that do NOT pass the filter (candidates to prune) ===")
     for r in rows:
         key = (r["sym"].split("/")[0], r["strat"])
         if key in cur and key not in win_keys:

@@ -1,8 +1,8 @@
-"""Mapa de correlaciones (Fase B) — ¿qué monedas se mueven juntas?
+"""Correlation map (phase B): which coins move together?
 
-Correlación de retornos 1h entre las monedas del núcleo (y las 12 para contexto),
-full 3 años y reciente (90d). Sirve para no apostar varias veces a lo mismo
-(p.ej. BTC/BNB suelen ir juntas → 2 longs = 1 apuesta doble).
+Correlation of 1h returns across the core coins (and the 12 majors for context),
+full 3 years and recent (90d). Used to avoid placing the same bet several times
+(e.g. BTC/BNB tend to move together -> 2 longs = 1 doubled bet).
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 
 from config import DATA_DIR
@@ -47,25 +46,21 @@ def _fmt(cm, order):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-    L = ["# 🔗 Mapa de correlaciones — retornos 1h",
+    L = ["# Correlation map - 1h returns",
          f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC_\n",
-         "## Núcleo (full 3 años)", _fmt(_ret_matrix(CORE), CORE),
-         "\n## Núcleo (últimos 90 días)", _fmt(_ret_matrix(CORE, tail=24 * 90), CORE),
-         "\n## Las 12 (full 3 años)", _fmt(_ret_matrix(ALL), ALL)]
+         "## Core (full 3 years)", _fmt(_ret_matrix(CORE), CORE),
+         "\n## Core (last 90 days)", _fmt(_ret_matrix(CORE, tail=24 * 90), CORE),
+         "\n## The 12 majors (full 3 years)", _fmt(_ret_matrix(ALL), ALL)]
     cm = _ret_matrix(CORE)
     pairs = [(a, b, cm.loc[a, b]) for i, a in enumerate(CORE) for b in CORE[i + 1:]]
     hi = [f"{a}-{b} ({c:.2f})" for a, b, c in sorted(pairs, key=lambda x: -x[2]) if c >= 0.6]
-    L.append("\n_Pares del núcleo muy correlacionados (≥0.60): " + (", ".join(hi) or "ninguno") +
-             ". Para sizing B: tratar un clúster correlacionado como ~una sola apuesta._")
+    L.append("\n_Highly correlated core pairs (>=0.60): " + (", ".join(hi) or "none") +
+             ". For phase B sizing: treat a correlated cluster as roughly one bet._")
     md = "\n".join(L)
     out = DATA_DIR / "reports" / "correlation_map.md"
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]")
+    print(f"\n[saved to {out}]")
 
 
 if __name__ == "__main__":

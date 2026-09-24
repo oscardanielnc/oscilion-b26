@@ -1,24 +1,25 @@
-"""Campaña de validación del edge (decisión go/no-go del proyecto).
+"""Edge validation campaign (the project's go/no-go decision for range reversion).
 
-Corre el backtest honesto sobre 12 monedas × 3 años (1h), comparando la lógica
-naïve vs con confirmación de giro, y desglosa estabilidad temporal (semestral),
-por símbolo, por régimen y sensibilidad a parámetros. Paraleliza por símbolo.
+Runs the honest backtest over 12 coins x 3 years (1h), comparing the naive logic
+vs the one with turn confirmation, and breaks down temporal stability (per
+semester), per symbol, per regime and parameter sensitivity. Parallel per symbol.
 
-Salida: data/reports/edge_campaign.md + resumen por consola.
+Output: data/reports/edge_campaign_<tf>.md + a console summary.
 """
 from __future__ import annotations
 
 import os
 
-# CRÍTICO (antes de importar numpy): 1 hilo BLAS por proceso. Con multiprocessing
-# (12 workers) y BLAS multihilo (24 cores) habría 12×24 hilos = thrashing → cuelgue.
+# CRITICAL (before importing numpy): 1 BLAS thread per process. With multiprocessing
+# (12 workers) and multithreaded BLAS (24 cores) there would be 12x24 threads =
+# thrashing -> hang.
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
            "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
     os.environ.setdefault(_v, "1")
 
 import sys
 
-# permitir ejecutar como script suelto: añadir la raíz del proyecto al path
+# allow running as a standalone script: add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
@@ -36,22 +37,22 @@ SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "BNB/USDT:USDT",
            "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT"]
 
 CAPITAL = 10_000.0
-# fijados por CLI (ver main); globales para que el Pool de Windows los herede
+# set from the CLI (see main); module globals so the Windows Pool inherits them
 TF = "1h"
 MAX_HOLD = 72
 
 
 def _configs() -> dict[str, BTParams]:
     return {
-        "naive (sin giro)": BTParams(require_confirmation=False, max_hold_bars=MAX_HOLD),
-        "confirm (con giro)": BTParams(require_confirmation=True, max_hold_bars=MAX_HOLD),
+        "naive (no turn confirmation)": BTParams(require_confirmation=False, max_hold_bars=MAX_HOLD),
+        "confirm (turn confirmation)": BTParams(require_confirmation=True, max_hold_bars=MAX_HOLD),
         "confirm + range-only": BTParams(require_confirmation=True, max_hold_bars=MAX_HOLD,
                                          allow_regimes=("range",)),
     }
 
 
 def _worker(args):
-    sym, tf, params = args   # tf/params viajan pickled desde el padre (Windows spawn-safe)
+    sym, tf, params = args   # tf/params are pickled from the parent (Windows spawn-safe)
     return sym, backtest_symbol(sym, tf, params)
 
 
@@ -72,10 +73,6 @@ def _semester(ts_ms: int) -> str:
 
 def main() -> None:
     global TF, MAX_HOLD
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
 
     import argparse
 
@@ -86,17 +83,17 @@ def main() -> None:
     TF, MAX_HOLD = args.tf, args.max_hold
 
     L: list[str] = []
-    L.append("# 🔬 Campaña de validación del edge — Oscilion")
-    L.append(f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · 12 monedas × 3 años · "
-             f"{TF} · max_hold={MAX_HOLD} · capital ${CAPITAL:,.0f} · riesgo 2%/trade · RR≥2.5_\n")
+    L.append("# Edge validation campaign - Oscilion")
+    L.append(f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | 12 coins x 3 years | "
+             f"{TF} | max_hold={MAX_HOLD} | capital ${CAPITAL:,.0f} | risk 2%/trade | RR>=2.5_\n")
 
     pooled_by_cfg: dict[str, list[dict]] = {}
-    L.append("## 1) Comparación de configuraciones (pooled, neto de costos)")
-    L.append("| Config | N | Winrate | PF | Exp/trade | Retorno | MaxDD | Sharpe |")
+    L.append("## 1) Configuration comparison (pooled, net of costs)")
+    L.append("| Config | N | Winrate | PF | Exp/trade | Return | MaxDD | Sharpe |")
     L.append("|---|---:|---:|---:|---:|---:|---:|---:|")
     for name, params in _configs().items():
         t0 = time.time()
-        print(f"[{time.strftime('%H:%M:%S')}] iniciando '{name}' ...", flush=True)
+        print(f"[{time.strftime('%H:%M:%S')}] starting '{name}' ...", flush=True)
         pooled = run_config(name, params)
         pooled_by_cfg[name] = pooled
         s = metrics.summarize(pooled, CAPITAL)
@@ -106,21 +103,19 @@ def main() -> None:
         print(f"[{time.time()-t0:.0f}s] {name}: N={s['n']} PF={s['profit_factor']:.2f} "
               f"Sharpe={s['sharpe']:.2f} ret={s['total_return']*100:.1f}%", flush=True)
 
-    primary = pooled_by_cfg["confirm (con giro)"]
+    primary = pooled_by_cfg["confirm (turn confirmation)"]
     dfp = pd.DataFrame(primary)
 
-    # 2) por símbolo
-    L.append("\n## 2) Por símbolo (config: confirm con giro)")
-    L.append("| Símbolo | N | Winrate | PF | Exp/trade | Retorno | Sharpe |")
+    L.append("\n## 2) Per symbol (config: turn confirmation)")
+    L.append("| Symbol | N | Winrate | PF | Exp/trade | Return | Sharpe |")
     L.append("|---|---:|---:|---:|---:|---:|---:|")
     for sym, g in dfp.groupby("sym"):
         s = metrics.summarize(g.to_dict("records"), CAPITAL)
         L.append(f"| {sym} | {s['n']} | {s['winrate']*100:.1f}% | {s['profit_factor']:.2f} | "
                  f"{s['expectancy_pct']*100:.3f}% | {s['total_return']*100:.1f}% | {s['sharpe']:.2f} |")
 
-    # 3) estabilidad temporal (semestral)
-    L.append("\n## 3) Estabilidad temporal — semestral (confirm)")
-    L.append("| Semestre | N | Winrate | PF | Exp/trade |")
+    L.append("\n## 3) Temporal stability - per semester (confirm)")
+    L.append("| Semester | N | Winrate | PF | Exp/trade |")
     L.append("|---|---:|---:|---:|---:|")
     dfp["sem"] = dfp["exit_ts"].apply(_semester)
     for sem, g in dfp.groupby("sem"):
@@ -128,33 +123,30 @@ def main() -> None:
         L.append(f"| {sem} | {s['n']} | {s['winrate']*100:.1f}% | {s['profit_factor']:.2f} | "
                  f"{s['expectancy_pct']*100:.3f}% |")
 
-    # 4) por régimen
-    L.append("\n## 4) Por régimen (confirm)")
-    L.append("| Régimen | N | Winrate | PF | Exp/trade |")
+    L.append("\n## 4) Per regime (confirm)")
+    L.append("| Regime | N | Winrate | PF | Exp/trade |")
     L.append("|---|---:|---:|---:|---:|")
     for reg, g in dfp.groupby("regime"):
         s = metrics.trade_stats(g.to_dict("records"))
         L.append(f"| {reg} | {s['n']} | {s['winrate']*100:.1f}% | {s['profit_factor']:.2f} | "
                  f"{s['expectancy_pct']*100:.3f}% |")
 
-    # 5) calibración
-    L.append("\n## 5) Calibración (confirm) — ¿el score se cumple?")
-    L.append("| Bucket | N | Winrate | Ret medio |")
+    L.append("\n## 5) Calibration (confirm) - does the score hold up?")
+    L.append("| Bucket | N | Winrate | Mean return |")
     L.append("|---|---:|---:|---:|")
     for b in metrics.calibration(primary):
         L.append(f"| {b['bucket']}-{b['bucket']+10} | {b['n']} | {b['winrate']*100:.1f}% | "
                  f"{b['avg_ret_pct']*100:.3f}% |")
 
-    # salidas
     exits = dfp["exit_reason"].value_counts().to_dict()
-    L.append(f"\n_Salidas (confirm): " + ", ".join(f"{k}={v}" for k, v in exits.items()) + "_")
+    L.append("\n_Exits (confirm): " + ", ".join(f"{k}={v}" for k, v in exits.items()) + "_")
 
     md = "\n".join(L)
     out = DATA_DIR / "reports" / f"edge_campaign_{TF}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

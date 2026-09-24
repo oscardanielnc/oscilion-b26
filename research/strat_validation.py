@@ -1,16 +1,16 @@
-"""R2 — Validación honesta POR MONEDA de estrategias portadas del proyecto BTC.
+"""R2: honest PER-COIN validation of the strategies ported from the earlier project.
 
-Para cada estrategia × moneda (12 monedas, 3 años, motor honesto con salidas
-15m pesimistas + costos reales):
-  1) DEFAULT params → train/test (ancla insesgada).
-  2) BARRIDO de parámetros → se elige el mejor SOLO en train, se reporta en test
-     (selección OOS honesta).
-  3) WALK-FORWARD → por fold se elige config en su train y se evalúa en su test;
-     se agrupan los trades OOS. Veredicto primario.
+For each strategy x coin (12 coins, 3 years, honest engine with pessimistic 15m
+exits + real costs):
+  1) DEFAULT params -> train/test (unbiased anchor).
+  2) Parameter SWEEP -> the best is chosen ONLY on train and reported on test
+     (honest OOS selection).
+  3) WALK-FORWARD -> per fold the config is chosen on its train and evaluated on
+     its test; OOS trades are pooled. Primary verdict.
 
-NO se promedia a ciegas (las correlacionadas con BTC ganarían peso): se reporta
-por moneda y, para resumen, voto equiponderado (cada moneda cuenta 1).
-Métrica primaria: expectativa por trade en R.
+No blind averaging (BTC-correlated coins would dominate): results are reported per
+coin and, for the summary, as an equal-weighted vote (each coin counts once).
+Primary metric: expectancy per trade in R.
 """
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ GRIDS = {
     },
     "orb_breakout": {
         "range_max_pct": [0.010, 0.015, 0.020],
-        "tp_r": [0.0, 3.0, 4.0, 6.0],            # 0 = sin TP (corre hasta SL/timeout)
+        "tp_r": [0.0, 3.0, 4.0, 6.0],            # 0 = no TP (runs until SL/timeout)
         "fresh_gate": [True, False],
         "long_only": [True, False],
         "session_filter": [True, False],
@@ -72,7 +72,7 @@ GRIDS = {
     },
     "vwap_anchor": {
         "sl_atr_mult": [1.5, 2.0, 2.5],
-        "tp_r": [0.0, 2.0, 2.5, 4.0],            # 0 = sin TP (corre a SL/timeout)
+        "tp_r": [0.0, 2.0, 2.5, 4.0],            # 0 = no TP (runs until SL/timeout)
         "fresh_gate": [True, False],
         "trend_filter": [True, False],
         "session_filter": [True, False],
@@ -91,9 +91,8 @@ DEFAULTS = {
                     "trend_filter": False, "session_filter": False},
 }
 MAXHOLD = {"momentum_pullback": 60, "ema_trend_stack": 60, "orb_breakout": 24,
-           "break_retest": 42, "vwap_anchor": 120}      # 1h × 120 = 5 días
+           "break_retest": 42, "vwap_anchor": 120}      # 1h x 120 = 5 days
 MIN_TRAIN = 30
-MIN_TEST = 20
 MIN_WF = 30
 
 
@@ -128,7 +127,7 @@ def _worker(args):
         return sym, None
     configs = _grid(strategy)
     mh = MAXHOLD[strategy]
-    # correr cada config UNA vez sobre los 3 años (causal); luego cortar por fecha
+    # run each config ONCE over the 3 years (causal), then slice by date
     runs = []
     for cfg in configs:
         trades = run(bundle, StratParams(strategy=strategy, params=cfg, max_hold_signal_bars=mh))
@@ -141,7 +140,7 @@ def _worker(args):
     def_train = _stats(_sub(default_trades, 0, SPLIT))
     def_test = _stats(_sub(default_trades, SPLIT, t_max))
 
-    # barrido: elegir por train, reportar test
+    # sweep: choose on train, report on test
     best, best_train = None, -1e9
     for cfg, tr in runs:
         s = _stats(_sub(tr, 0, SPLIT))
@@ -153,7 +152,7 @@ def _worker(args):
         sweep = {"cfg": _label(cfg), "train": _stats(_sub(tr, 0, SPLIT)),
                  "test": _stats(_sub(tr, SPLIT, t_max))}
 
-    # walk-forward: por fold elegir en train(<fold), evaluar en fold test
+    # walk-forward: per fold choose on train (< fold), evaluate on the fold test
     wf_pool = []
     wf_folds = []
     bounds = WF_BOUNDS + [t_max]
@@ -178,30 +177,25 @@ def _worker(args):
 
 
 def _verdict(r):
-    """Veredicto por moneda (primario = walk-forward OOS)."""
+    """Per-coin verdict (primary = walk-forward OOS)."""
     if r is None:
-        return "—", "sin datos"
+        return "-", "no data"
     wf = r["wf"]; dt = r["def_test"]
     if wf["n"] < MIN_WF:
-        return "❔", f"WF n={wf['n']}<{MIN_WF}"
+        return "N/A", f"WF n={wf['n']}<{MIN_WF}"
     if wf["exp_R"] >= 0.05 and dt["exp_R"] > 0:
-        return "✅", "WF+default OOS positivos"
+        return "PASS", "WF + default OOS positive"
     if wf["exp_R"] > 0:
-        return "🟡", "WF OOS marginal"
-    return "❌", "WF OOS ≤ 0"
+        return "MARGINAL", "WF OOS marginal"
+    return "FAIL", "WF OOS <= 0"
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-    L = ["# 🔬 R2 — Validación honesta por moneda (estrategias rescatadas de BTC)",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · 12 monedas · 3 años · motor honesto "
-         f"(señal 2h/4h, salida 15m pesimista) · costos taker reales · métrica = exp. por trade en R_\n",
-         "_Default = params del YAML (insesgado). Sweep = mejor en TRAIN→reportado en TEST. "
-         "WF = walk-forward 4 folds, config elegida por fold en su train, OOS agrupado (veredicto primario)._\n"]
+    L = ["# R2 - Honest per-coin validation (strategies rescued from the earlier project)",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | 12 coins | 3 years | honest engine "
+         f"(2h/4h signal, pessimistic 15m exit) | real taker costs | metric = expectancy per trade in R_\n",
+         "_Default = the original YAML params (unbiased). Sweep = best on TRAIN -> reported on TEST. "
+         "WF = 4-fold walk-forward, config chosen per fold on its train, pooled OOS (primary verdict)._\n"]
 
     strategies = sys.argv[1].split(",") if len(sys.argv) > 1 else ["ema_trend_stack", "momentum_pullback"]
     all_res = {}
@@ -211,34 +205,34 @@ def main():
         with Pool(processes=min(len(SYMBOLS), 12)) as pool:
             res = dict(pool.map(_worker, [(s, strategy) for s in SYMBOLS]))
         all_res[strategy] = res
-        print(f"  [{time.time()-t0:.0f}s] hecho", flush=True)
+        print(f"  [{time.time()-t0:.0f}s] done", flush=True)
 
         L.append(f"## {strategy}")
-        L.append("| Moneda | V | def full n/expR | def TEST n/expR | sweep TEST n/expR | **WF OOS n/expR/WR** | mejor cfg WF (último fold) |")
+        L.append("| Coin | Verdict | def full n/expR | def TEST n/expR | sweep TEST n/expR | **WF OOS n/expR/WR** | best WF cfg (last fold) |")
         L.append("|---|:--:|---|---|---|---|---|")
         survivors = []
         for sym in SYMBOLS:
             r = res.get(sym)
             v, _why = _verdict(r)
             if r is None:
-                L.append(f"| {sym} | — | — | — | — | — | — |")
+                L.append(f"| {sym} | - | - | - | - | - | - |")
                 continue
             df, dt = r["def_full"], r["def_test"]
             sw = r["sweep"]; wf = r["wf"]
-            sw_s = f"{sw['test']['n']}/{sw['test']['exp_R']:+.3f}" if sw else "—"
-            last_cfg = r["wf_folds"][-1]["cfg"] if r["wf_folds"] else "—"
+            sw_s = f"{sw['test']['n']}/{sw['test']['exp_R']:+.3f}" if sw else "-"
+            last_cfg = r["wf_folds"][-1]["cfg"] if r["wf_folds"] else "-"
             L.append(f"| {sym} | {v} | {df['n']}/{df['exp_R']:+.3f} | {dt['n']}/{dt['exp_R']:+.3f} | "
                      f"{sw_s} | **{wf['n']}/{wf['exp_R']:+.3f}/{wf['wr']*100:.0f}%** | {last_cfg} |")
-            if v in ("✅", "🟡"):
+            if v in ("PASS", "MARGINAL"):
                 survivors.append((sym, v, wf["exp_R"], wf["n"]))
 
-        # resumen equiponderado (cada moneda 1 voto)
+        # equal-weighted summary (one vote per coin)
         wfs = [res[s]["wf"]["exp_R"] for s in SYMBOLS if res.get(s) and res[s]["wf"]["n"] >= MIN_WF]
         npos = sum(1 for x in wfs if x > 0)
         med = float(np.median(wfs)) if wfs else 0.0
-        L.append(f"\n_Resumen {strategy}: monedas con WF OOS válido={len(wfs)}, positivas={npos}, "
-                 f"mediana exp_R (equiponderado)={med:+.3f}. Supervivientes (✅/🟡): "
-                 f"{', '.join(s.split('/')[0]+f' ({v},{r:+.3f},n={n})' for s,v,r,n in survivors) or 'ninguna'}._\n")
+        L.append(f"\n_Summary {strategy}: coins with a valid WF OOS={len(wfs)}, positive={npos}, "
+                 f"median exp_R (equal-weighted)={med:+.3f}. Survivors (PASS/MARGINAL): "
+                 f"{', '.join(s.split('/')[0]+f' ({v},{r:+.3f},n={n})' for s,v,r,n in survivors) or 'none'}._\n")
 
     md = "\n".join(L)
     tag = "r2" if set(strategies) == {"ema_trend_stack", "momentum_pullback"} else "r3_" + "_".join(strategies)
@@ -246,7 +240,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

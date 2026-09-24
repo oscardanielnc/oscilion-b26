@@ -1,13 +1,13 @@
-"""Validación OUT-OF-SAMPLE del breakout (¿el pivot es real o data-snooping?).
+"""OUT-OF-SAMPLE validation of the breakout (is the pivot real or data snooping?).
 
-El umbral de ruptura (≥X·ATR) se elige SOLO con datos de entrenamiento y se
-evalúa en datos que la selección nunca vio:
-  1) Split anclado: train (2023→2024) vs test (2025→2026).
-  2) Walk-forward: train expansivo, test en ventanas de 6 meses; se agrupan
-     todos los trades OOS (cada fold con su umbral elegido en su propio train).
+The breakout threshold (>= X * ATR) is chosen ONLY on training data and evaluated
+on data the selection never saw:
+  1) Anchored split: train (2023 -> 2024) vs test (2025 -> 2026).
+  2) Walk-forward: expanding train, 6-month test windows; all OOS trades are
+     pooled (each fold with the threshold chosen on its own train).
 
-Métricas por-trade (PF, winrate, expectancy) — sin el artefacto de la equity
-pooled. Cada umbral se backtestea una sola vez sobre los 3 años (paralelo).
+Per-trade metrics (PF, winrate, expectancy), without the pooled-equity artifact.
+Each threshold is backtested once over the 3 years (in parallel).
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "BNB/USDT:USDT",
            "XRP/USDT:USDT", "ADA/USDT:USDT", "DOGE/USDT:USDT", "AVAX/USDT:USDT",
            "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT"]
 THRESHOLDS = [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-MIN_TRAIN = 150  # mínimo de trades en train para considerar un umbral
+MIN_TRAIN = 150  # minimum train trades for a threshold to be considered
 
 
 def _ms(y: int, m: int) -> int:
@@ -66,7 +66,7 @@ def _stats(trades):
 
 
 def _select(trades_by_t, lo, hi):
-    """Elige el umbral que maximiza expectancy en [lo,hi) (con n>=MIN_TRAIN)."""
+    """Pick the threshold that maximizes expectancy in [lo, hi) (with n >= MIN_TRAIN)."""
     scored = {}
     for t, trs in trades_by_t.items():
         scored[t] = _stats(_subset(trs, lo, hi))
@@ -82,30 +82,24 @@ def _row(label, s):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
     trades_by_t: dict[float, list[dict]] = {}
     for t in THRESHOLDS:
         t0 = time.time()
-        print(f"[{time.strftime('%H:%M:%S')}] backtest umbral {t} ATR ...", flush=True)
+        print(f"[{time.strftime('%H:%M:%S')}] backtest threshold {t} ATR ...", flush=True)
         trades_by_t[t] = run_threshold(t)
         print(f"  [{time.time()-t0:.0f}s] {len(trades_by_t[t])} trades", flush=True)
 
-    L = ["# 🔒 Validación OOS del breakout — Oscilion",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · 12 monedas × 3 años · 1h · "
-         f"momentum + confirm · neto de costos · métricas por-trade_\n"]
+    L = ["# Breakout OOS validation - Oscilion",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | 12 coins x 3 years | 1h | "
+         f"momentum + confirm | net of costs | per-trade metrics_\n"]
 
-    # rango temporal de los datos
     all_ts = [tr["entry_ts"] for trs in trades_by_t.values() for tr in trs]
     t_min, t_max = min(all_ts), max(all_ts) + 1
 
-    # --- 1) grilla train vs test (split anclado en 2025-01) ---
+    # --- 1) train vs test grid (split anchored at 2025-01) ---
     split = _ms(2025, 1)
-    L.append("## 1) Grilla por umbral — train (→2024-12) vs test (2025→) ")
-    L.append("| Umbral ATR | tr N | tr PF | tr exp | **te N** | **te PF** | **te exp** |")
+    L.append("## 1) Grid per threshold - train (->2024-12) vs test (2025->)")
+    L.append("| ATR threshold | tr N | tr PF | tr exp | **te N** | **te PF** | **te exp** |")
     L.append("|---|---:|---:|---:|---:|---:|---:|")
     for t in THRESHOLDS:
         tr_s = _stats(_subset(trades_by_t[t], t_min, split))
@@ -113,45 +107,44 @@ def main():
         L.append(f"| {t} | {tr_s['n']} | {tr_s['profit_factor']:.2f} | {tr_s['expectancy_pct']*100:.3f}% "
                  f"| {te_s['n']} | {te_s['profit_factor']:.2f} | {te_s['expectancy_pct']*100:.3f}% |")
 
-    # --- 2) split anclado: elegir en train, reportar test ---
+    # --- 2) anchored split: choose on train, report test ---
     t_star = _select(trades_by_t, t_min, split)
     train_s = _stats(_subset(trades_by_t[t_star], t_min, split))
     test_s = _stats(_subset(trades_by_t[t_star], split, t_max))
-    L.append(f"\n## 2) Split anclado — umbral elegido en TRAIN = **{t_star} ATR**")
-    L.append("| Periodo | N | Winrate | PF | Exp/trade |")
+    L.append(f"\n## 2) Anchored split - threshold chosen on TRAIN = **{t_star} ATR**")
+    L.append("| Period | N | Winrate | PF | Exp/trade |")
     L.append("|---|---:|---:|---:|---:|")
-    L.append(_row("TRAIN (→2024-12)", train_s))
-    L.append(_row("**TEST (2025→2026, OOS)**", test_s))
+    L.append(_row("TRAIN (->2024-12)", train_s))
+    L.append(_row("**TEST (2025->2026, OOS)**", test_s))
 
-    # --- 3) walk-forward (train expansivo, test 6m; pool OOS) ---
+    # --- 3) walk-forward (expanding train, 6m test; pooled OOS) ---
     bounds = [_ms(2024, 7), _ms(2025, 1), _ms(2025, 7), _ms(2026, 1), t_max]
-    L.append("\n## 3) Walk-forward — umbral elegido por fold en su train; test OOS")
-    L.append("| Fold (test) | umbral* | N | Winrate | PF | Exp/trade |")
+    L.append("\n## 3) Walk-forward - threshold chosen per fold on its train; OOS test")
+    L.append("| Fold (test) | threshold* | N | Winrate | PF | Exp/trade |")
     L.append("|---|---:|---:|---:|---:|---:|")
     oos_pool = []
     for i in range(len(bounds) - 1):
         te_lo, te_hi = bounds[i], bounds[i + 1]
-        tsel = _select(trades_by_t, t_min, te_lo)          # train = todo lo previo
+        tsel = _select(trades_by_t, t_min, te_lo)          # train = everything before
         sub = _subset(trades_by_t[tsel], te_lo, te_hi)
         oos_pool.extend(sub)
         s = _stats(sub)
         lbl = datetime.fromtimestamp(te_lo / 1000, tz=timezone.utc).strftime("%Y-%m")
-        L.append(f"| desde {lbl} | {tsel} | {s['n']} | {s['winrate']*100:.1f}% | "
+        L.append(f"| from {lbl} | {tsel} | {s['n']} | {s['winrate']*100:.1f}% | "
                  f"{s['profit_factor']:.2f} | {s['expectancy_pct']*100:.3f}% |")
     pool_s = _stats(oos_pool)
-    L.append(_row("**POOL OOS (walk-forward)**", pool_s))
+    L.append(_row("**OOS POOL (walk-forward)**", pool_s))
 
-    # --- veredicto ---
     ok_anchored = test_s["profit_factor"] > 1.0 and test_s["expectancy_pct"] > 0
     ok_wf = pool_s["profit_factor"] > 1.0 and pool_s["expectancy_pct"] > 0
     if ok_anchored and ok_wf:
-        verd = "✅ EDGE CONFIRMADO OOS (positivo en split anclado Y walk-forward)"
+        verd = "EDGE CONFIRMED OOS (positive in the anchored split AND walk-forward)"
     elif ok_anchored or ok_wf:
-        verd = "🟡 EDGE PARCIAL (positivo en uno de los dos OOS) — frágil"
+        verd = "PARTIAL EDGE (positive in one of the two OOS tests), fragile"
     else:
-        verd = "❌ NO confirma OOS (data-snooping probable) — el edge no sobrevive"
-    L.append(f"\n## Veredicto OOS: {verd}")
-    L.append(f"- Split anclado TEST: PF {test_s['profit_factor']:.2f}, exp {test_s['expectancy_pct']*100:.3f}%")
+        verd = "NOT confirmed OOS (likely data snooping): the edge does not survive"
+    L.append(f"\n## OOS verdict: {verd}")
+    L.append(f"- Anchored split TEST: PF {test_s['profit_factor']:.2f}, exp {test_s['expectancy_pct']*100:.3f}%")
     L.append(f"- Walk-forward POOL: PF {pool_s['profit_factor']:.2f}, exp {pool_s['expectancy_pct']*100:.3f}%")
 
     md = "\n".join(L)
@@ -159,7 +152,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

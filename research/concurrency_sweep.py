@@ -1,9 +1,9 @@
-"""Sweep de concurrencia de cartera (2026-06-22) — fija max_concurrent CON EVIDENCIA.
+"""Portfolio concurrency sweep (2026-06-22): sets max_concurrent WITH EVIDENCE.
 
-Simula la cuenta única (backtest/portfolio_sim) sobre los combos CON capital del
-PORTFOLIO real, en la ventana OOS (>2025), barriendo max_concurrent × max_per_cluster.
-Reporta retorno, MaxDD, Sharpe y trades tomados/saltados → elige el tope que más
-throughput da sin disparar el drawdown.
+Simulates the single account (backtest/portfolio_sim) over the capital combos of
+the real PORTFOLIO, in the OOS window (>2025), sweeping max_concurrent x
+max_per_cluster. Reports return, MaxDD, Sharpe and trades taken/skipped, to pick
+the cap that gives the most throughput without blowing up the drawdown.
 """
 from __future__ import annotations
 
@@ -24,12 +24,8 @@ SPLIT = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
     caps = [(s, a) for s, a in all_assignments() if not a.observe_only]
-    print(f"Sweep concurrencia · {len(caps)} combos con capital · OOS>2025\n")
+    print(f"Concurrency sweep | {len(caps)} capital combos | OOS>2025\n")
     trades_by = {}
     weights, clusters = {}, {}
     for sym, a in caps:
@@ -51,7 +47,7 @@ def main():
                             max_concurrent=mc, max_per_cluster=mpc, since_ts=SPLIT)
             print(f"{mc:<6}{mpc:<5}{r.n_taken:<7}{r.n_skipped:<7}"
                   f"{r.total_return*100:>+7.1f}%  {r.max_drawdown*100:>+6.1f}%  {r.sharpe:>5.2f}")
-    print("\n(return/MaxDD/Sharpe = cuenta única compuesta; R por trade ya incluye costos)")
+    print("\n(return/MaxDD/Sharpe = compounded single account; per-trade R already includes costs)")
 
 
 if __name__ == "__main__":

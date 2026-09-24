@@ -1,8 +1,8 @@
-"""Probe decisivo: ¿el edge está en momentum (continuación) en vez de reversión?
+"""Decisive probe: is the edge in momentum (continuation) instead of reversion?
 
-Compara reversión-con-giro vs momentum/breakout-con-confirmación sobre 12
-monedas × 3 años (1h), neto de costos. Si momentum es claramente positivo →
-PIVOT real. Si ambos pierden → no hay estructura explotable → descartar.
+Compares reversion-with-turn-confirmation vs momentum/breakout-with-confirmation
+over 12 coins x 3 years (1h), net of costs. If momentum is clearly positive ->
+a real PIVOT. If both lose -> no exploitable structure -> discard.
 """
 from __future__ import annotations
 
@@ -56,16 +56,11 @@ def run_config(params):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-    L = ["# 🧪 Probe reversión vs momentum — Oscilion",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · 12 monedas × 3 años · 1h · "
-         f"neto de costos_\n",
-         "## Pooled (neto de costos)",
-         "| Estrategia | N | Winrate | PF | Exp/trade | Retorno | MaxDD | Sharpe |",
+    L = ["# Reversion vs momentum probe - Oscilion",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | 12 coins x 3 years | 1h | "
+         f"net of costs_\n",
+         "## Pooled (net of costs)",
+         "| Strategy | N | Winrate | PF | Exp/trade | Return | MaxDD | Sharpe |",
          "|---|---:|---:|---:|---:|---:|---:|---:|"]
     pooled_by = {}
     for name, p in CONFIGS.items():
@@ -80,19 +75,19 @@ def main():
         print(f"[{time.time()-t0:.0f}s] {name}: N={s['n']} PF={s['profit_factor']:.2f} "
               f"exp={s['expectancy_pct']*100:.3f}% Sharpe={s['sharpe']:.2f}", flush=True)
 
-    # detalle de momentum: por símbolo, semestral, calibración
+    # momentum detail: per symbol, per semester, calibration
     mom = pooled_by["momentum + confirm"]
     df = pd.DataFrame(mom)
-    L.append("\n## Momentum — por símbolo")
-    L.append("| Símbolo | N | Winrate | PF | Exp/trade | Retorno |")
+    L.append("\n## Momentum - per symbol")
+    L.append("| Symbol | N | Winrate | PF | Exp/trade | Return |")
     L.append("|---|---:|---:|---:|---:|---:|")
     for sym, g in df.groupby("sym"):
         s = metrics.summarize(g.to_dict("records"), CAPITAL)
         L.append(f"| {sym} | {s['n']} | {s['winrate']*100:.1f}% | {s['profit_factor']:.2f} | "
                  f"{s['expectancy_pct']*100:.3f}% | {s['total_return']*100:.1f}% |")
 
-    L.append("\n## Momentum — semestral")
-    L.append("| Semestre | N | Winrate | PF | Exp/trade |")
+    L.append("\n## Momentum - per semester")
+    L.append("| Semester | N | Winrate | PF | Exp/trade |")
     L.append("|---|---:|---:|---:|---:|")
     df["sem"] = df["exit_ts"].apply(
         lambda ms: (lambda d: f"{d.year}-H{1 if d.month <= 6 else 2}")(
@@ -102,21 +97,21 @@ def main():
         L.append(f"| {sem} | {s['n']} | {s['winrate']*100:.1f}% | {s['profit_factor']:.2f} | "
                  f"{s['expectancy_pct']*100:.3f}% |")
 
-    L.append("\n## Momentum — calibración")
-    L.append("| Bucket | N | Winrate | Ret medio |")
+    L.append("\n## Momentum - calibration")
+    L.append("| Bucket | N | Winrate | Mean return |")
     L.append("|---|---:|---:|---:|")
     for b in metrics.calibration(mom):
         L.append(f"| {b['bucket']}-{b['bucket']+10} | {b['n']} | {b['winrate']*100:.1f}% | "
                  f"{b['avg_ret_pct']*100:.3f}% |")
     exits = df["exit_reason"].value_counts().to_dict()
-    L.append(f"\n_Salidas (momentum): " + ", ".join(f"{k}={v}" for k, v in exits.items()) + "_")
+    L.append("\n_Exits (momentum): " + ", ".join(f"{k}={v}" for k, v in exits.items()) + "_")
 
     md = "\n".join(L)
     out = DATA_DIR / "reports" / "momentum_probe.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

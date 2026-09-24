@@ -1,22 +1,25 @@
-"""R7 — Patrones de vela como FILTRO: ¿quién los respeta y qué los confirma?
+"""R7: candle patterns as a FILTER. Which coins respect them and what confirms them?
 
-Estudio de PODER DISCRIMINANTE (independiente de estrategia), 12 monedas, 3 años, 1h.
+A study of DISCRIMINATING POWER (strategy-independent), 12 coins, 3 years, 1h.
 
-Patrones (portados de sentinel/candle_filter.py):
-  Alcistas: bullish engulfing · morning star · hammer
-  Bajistas: bearish engulfing · evening star · shooting star
+Patterns (ported from Sentinel's candle_filter.py):
+  Bullish: bullish engulfing, morning star, hammer
+  Bearish: bearish engulfing, evening star, shooting star
 
-Métrica de "respeto": tras el patrón en la barra i, con barreras simétricas ±k·ATR
-y horizonte H, ¿toca primero la barrera A FAVOR del patrón? → P(dirección correcta).
-Baseline ≈ 50% (un patrón sin edge). Normalizado por ATR = comparable entre monedas.
+"Respect" metric: after the pattern on bar i, with symmetric +/- k * ATR barriers
+and horizon H, does price hit the barrier IN FAVOR of the pattern first?
+-> P(correct direction). Baseline ~50% (a pattern with no edge). ATR-normalized, so
+comparable across coins.
 
-Parte 1: ranking de respeto por moneda + correlación con su volatilidad (hipótesis:
-         las más volátiles respetan más).
-Parte 2: qué INDICADORES presentes en la barra del patrón suben P(correcta) — confirmación.
-         Sin look-ahead: todo se evalúa con datos ≤ i; la barrera mira i+1..i+H.
+Part 1: respect ranking per coin + correlation with its volatility (hypothesis: the
+        more volatile coins respect patterns more).
+Part 2: which INDICATORS present on the pattern bar raise P(correct): confirmation.
+        No look-ahead: everything is evaluated with data <= i; the barrier looks at
+        i+1..i+H.
 
-Honestidad: reporto n, lift y CONSISTENCIA entre monedas (un lift pooled puede ser 1-2
-monedas). Patrón solo ≈ débil (lo dice sentinel); el valor está en la confluencia.
+Honesty: n, lift and CONSISTENCY across coins are reported (a pooled lift can be
+driven by 1-2 coins). A pattern alone is weak (Sentinel says so too); any value is
+in the confluence.
 """
 from __future__ import annotations
 
@@ -40,16 +43,16 @@ from oscilion.features import indicators as ind
 SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "BNB/USDT:USDT",
            "XRP/USDT:USDT", "ADA/USDT:USDT", "DOGE/USDT:USDT", "AVAX/USDT:USDT",
            "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT",
-           "SUI/USDT:USDT"]      # SUI: fuerte en Sentinel (verificar)
+           "SUI/USDT:USDT"]      # SUI: strong in Sentinel (to verify)
 
-K_ATR = 1.0                      # barreras ±1 ATR
+K_ATR = 1.0                      # +/- 1 ATR barriers
 TF = sys.argv[1] if len(sys.argv) > 1 else "1h"
-H = {"1h": 24, "15m": 96}.get(TF, 24)    # horizonte ≈ 24h real en ambos TF
+H = {"1h": 24, "15m": 96}.get(TF, 24)    # horizon ~24h of real time on both TFs
 
 
-# ----------------------------- detectores ------------------------------
+# ------------------------------ detectors -------------------------------
 def detect(o, h, l, c):
-    """Devuelve dos máscaras booleanas (bull, bear) por barra (alcista/bajista)."""
+    """Return two boolean masks (bull, bear) per bar."""
     n = len(c)
     bull = np.zeros(n, bool); bear = np.zeros(n, bool)
     for i in range(2, n):
@@ -81,8 +84,8 @@ def detect(o, h, l, c):
 
 
 def barrier_outcome(side, entry, atr_i, h, l, c, i, n, hh):
-    """1 si toca primero la barrera A FAVOR del patrón en i+1..i+hh; 0 si en contra;
-    si ninguna, por el signo del cierre a hh. side: +1 alcista, -1 bajista."""
+    """1 if the barrier IN FAVOR of the pattern is hit first in i+1..i+hh; 0 if
+    against; if neither, the sign of the close at hh. side: +1 bullish, -1 bearish."""
     up = entry + K_ATR * atr_i
     dn = entry - K_ATR * atr_i
     end = min(i + hh, n - 1)
@@ -90,7 +93,7 @@ def barrier_outcome(side, entry, atr_i, h, l, c, i, n, hh):
         hit_up = h[k] >= up
         hit_dn = l[k] <= dn
         if hit_up and hit_dn:
-            return 1 if side < 0 else 0          # pesimista: la adversa primero
+            return 1 if side < 0 else 0          # pessimistic: adverse barrier first
         if hit_up:
             return 1 if side > 0 else 0
         if hit_dn:
@@ -99,7 +102,7 @@ def barrier_outcome(side, entry, atr_i, h, l, c, i, n, hh):
     return 1 if (fwd * side) > 0 else 0
 
 
-# ------------------------------- worker --------------------------------
+# -------------------------------- worker --------------------------------
 def _worker(args):
     sym, tf, hh = args
     df = store.load_bars(sym, tf)
@@ -116,7 +119,7 @@ def _worker(args):
     vwap = ind.rolling_vwap(df, 24).to_numpy()
     atr_pct = atr / c
     med_atr_pct = float(np.nanmedian(atr_pct))
-    # volumen mediano móvil (20) y atr% mediano móvil para regímenes
+    # rolling median volume (20) and rolling median atr% for regimes
     medvol = np.full(n, np.nan); medatrp = np.full(n, np.nan)
     for i in range(20, n):
         medvol[i] = np.median(v[i-20:i])
@@ -124,8 +127,8 @@ def _worker(args):
 
     bull, bear = detect(o, h, l, c)
 
-    # indicadores de confirmación a evaluar (alineados a la dirección del patrón)
-    INDS = ["trend", "stack", "rsi_extremo", "vol_spike", "vwap_lado", "en_extremo", "vol_alta"]
+    # confirmation indicators to evaluate (aligned with the pattern's direction)
+    INDS = ["trend", "stack", "rsi_extreme", "vol_spike", "vwap_side", "at_extreme", "high_vol"]
     agg = {"n": 0, "correct": 0}
     ind_on = {k: {"n": 0, "correct": 0} for k in INDS}
     ind_off = {k: {"n": 0, "correct": 0} for k in INDS}
@@ -139,26 +142,26 @@ def _worker(args):
         out = barrier_outcome(side, c[i], atr[i], h, l, c, i, n, hh)
         agg["n"] += 1; agg["correct"] += out
 
-        # estados de confirmación (sin look-ahead)
+        # confirmation states (no look-ahead)
         if side > 0:
             states = {
                 "trend": c[i] > ema50[i],
                 "stack": ema9[i] > ema21[i] > ema50[i],
-                "rsi_extremo": np.isfinite(rsi[i]) and rsi[i] < 35,        # sobreventa (reversión alcista)
+                "rsi_extreme": np.isfinite(rsi[i]) and rsi[i] < 35,        # oversold (bullish reversal)
                 "vol_spike": np.isfinite(medvol[i]) and v[i] > 1.5 * medvol[i],
-                "vwap_lado": np.isfinite(vwap[i]) and c[i] > vwap[i],
-                "en_extremo": l[i] <= np.min(l[i-20:i+1]),                 # en mínimo reciente (soporte)
-                "vol_alta": np.isfinite(medatrp[i]) and atr_pct[i] > medatrp[i],
+                "vwap_side": np.isfinite(vwap[i]) and c[i] > vwap[i],
+                "at_extreme": l[i] <= np.min(l[i-20:i+1]),                 # at a recent low (support)
+                "high_vol": np.isfinite(medatrp[i]) and atr_pct[i] > medatrp[i],
             }
         else:
             states = {
                 "trend": c[i] < ema50[i],
                 "stack": ema9[i] < ema21[i] < ema50[i],
-                "rsi_extremo": np.isfinite(rsi[i]) and rsi[i] > 65,
+                "rsi_extreme": np.isfinite(rsi[i]) and rsi[i] > 65,
                 "vol_spike": np.isfinite(medvol[i]) and v[i] > 1.5 * medvol[i],
-                "vwap_lado": np.isfinite(vwap[i]) and c[i] < vwap[i],
-                "en_extremo": h[i] >= np.max(h[i-20:i+1]),
-                "vol_alta": np.isfinite(medatrp[i]) and atr_pct[i] > medatrp[i],
+                "vwap_side": np.isfinite(vwap[i]) and c[i] < vwap[i],
+                "at_extreme": h[i] >= np.max(h[i-20:i+1]),
+                "high_vol": np.isfinite(medatrp[i]) and atr_pct[i] > medatrp[i],
             }
         for k, on in states.items():
             tgt = ind_on[k] if on else ind_off[k]
@@ -173,10 +176,6 @@ def _rate(d):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
     t0 = time.time()
     tasks = [(s, TF, H) for s in SYMBOLS]
     with Pool(processes=min(len(SYMBOLS), 12)) as pool:
@@ -186,20 +185,20 @@ def main():
     rows = [(s, r) for s, r in res.items() if r]
     INDS = rows[0][1]["INDS"]
 
-    # ---- Parte 1: respeto por moneda + correlación con volatilidad ----
-    L = [f"# 🕯️ R7 — Patrones de vela ({TF}): ¿quién los respeta y qué los confirma?",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · {len(rows)} monedas · {TF} · "
-         f"barreras ±{K_ATR}·ATR, H={H} barras · {dt:.0f}s_\n",
-         "## Parte 1 — Respeto por moneda (P(dirección correcta); baseline≈50%)",
-         "| Moneda | n patrones | **P(correcta)** | lift vs 50% | volatilidad (ATR% mediana) |",
+    # ---- Part 1: respect per coin + correlation with volatility ----
+    L = [f"# R7 - Candle patterns ({TF}): who respects them and what confirms them?",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | {len(rows)} coins | {TF} | "
+         f"+/-{K_ATR} ATR barriers, H={H} bars | {dt:.0f}s_\n",
+         "## Part 1 - Respect per coin (P(correct direction); baseline ~50%)",
+         "| Coin | n patterns | **P(correct)** | lift vs 50% | volatility (median ATR%) |",
          "|---|--:|--:|--:|--:|"]
     part1 = []
-    for s, r in sorted(rows, key=lambda x: -( _rate(x[1]["agg"]) or 0)):
+    for s, r in sorted(rows, key=lambda x: -(_rate(x[1]["agg"]) or 0)):
         pr = _rate(r["agg"]); vol = r["vol"]
         part1.append((s, pr, vol, r["agg"]["n"]))
         L.append(f"| {s.split('/')[0]} | {r['agg']['n']} | {pr*100:.1f}% | "
                  f"{(pr-0.5)*100:+.1f} pp | {vol*100:.2f}% |")
-    # correlación respeto vs volatilidad (Spearman)
+    # respect vs volatility correlation (Spearman)
     prs = np.array([p for _s, p, _v, _n in part1])
     vols = np.array([v for _s, _p, v, _n in part1])
     try:
@@ -208,15 +207,15 @@ def main():
     except Exception:
         rho, pval = float("nan"), float("nan")
     npos = int(np.sum(prs > 0.5))
-    L.append(f"\n_Monedas con P>50% (patrón con algo de edge): {npos}/{len(prs)}. "
-             f"Correlación respeto↔volatilidad (Spearman): ρ={rho:+.2f} (p={pval:.2f}). "
-             f"Hipótesis 'más volátiles respetan más' → {'APOYADA' if rho>0.3 and pval<0.1 else 'NO concluyente'}._\n")
+    L.append(f"\n_Coins with P>50% (pattern with some edge): {npos}/{len(prs)}. "
+             f"Respect vs volatility correlation (Spearman): rho={rho:+.2f} (p={pval:.2f}). "
+             f"Hypothesis 'more volatile coins respect more' -> {'SUPPORTED' if rho>0.3 and pval<0.1 else 'NOT conclusive'}._\n")
 
-    # ---- Parte 2: confirmación por indicador (pooled equiponderado por moneda) ----
-    L.append("## Parte 2 — ¿Qué indicador CONFIRMA el patrón? (lift en P(correcta))")
-    L.append("Lift = P(correcta | patrón ∧ indicador) − P(correcta | patrón ∧ ¬indicador). "
-             "Equiponderado por moneda; consistencia = nº monedas con lift>0.\n")
-    L.append("| Indicador | P con | P sin | **lift (pp)** | consistencia | n con (tot) |")
+    # ---- Part 2: confirmation per indicator (equal-weighted per coin) ----
+    L.append("## Part 2 - Which indicator CONFIRMS the pattern? (lift in P(correct))")
+    L.append("Lift = P(correct | pattern and indicator) - P(correct | pattern and not indicator). "
+             "Equal-weighted per coin; consistency = number of coins with lift > 0.\n")
+    L.append("| Indicator | P with | P without | **lift (pp)** | consistency | n with (total) |")
     L.append("|---|--:|--:|--:|--:|--:|")
     ind_summary = []
     for k in INDS:
@@ -228,7 +227,7 @@ def main():
                 cons += 1 if (ron - roff) > 0 else 0
                 ntot += r["on"][k]["n"]
         if not ons:
-            L.append(f"| {k} | — | — | — | — | — |"); continue
+            L.append(f"| {k} | - | - | - | - | - |"); continue
         pc, ps = float(np.mean(ons)), float(np.mean(offs))
         ind_summary.append((k, (pc - ps) * 100, cons, len(ons)))
         L.append(f"| {k} | {pc*100:.1f}% | {ps*100:.1f}% | {(pc-ps)*100:+.1f} | "
@@ -236,14 +235,14 @@ def main():
 
     ind_summary.sort(key=lambda x: -x[1])
     best = ", ".join(f"{k} ({lift:+.1f}pp, {cons}/{ncoin})" for k, lift, cons, ncoin in ind_summary[:3])
-    L.append(f"\n_Top confirmadores: {best}._")
+    L.append(f"\n_Top confirmers: {best}._")
 
     md = "\n".join(L)
     out = DATA_DIR / "reports" / f"r7_candle_patterns_{TF}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print(md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

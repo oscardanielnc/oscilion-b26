@@ -1,9 +1,9 @@
-"""R2b — ¿la ejecución maker y el 'dejar correr ganadores' rescatan el edge?
+"""R2b: do maker execution and 'letting winners run' rescue the edge?
 
-Config FIJA por estrategia (sin selección por moneda → sin sesgo de overfit),
-informada por el walk-forward (tp_r alto). Compara, POR MONEDA, expectativa en R
-en el período OOS (2025→) bajo ejecución taker vs maker-entry (techo optimista,
-sin modelo de no-fill — eso es R4). Aísla el efecto de la ejecución.
+FIXED config per strategy (no per-coin selection -> no overfit bias), informed by
+the walk-forward (high tp_r). Compares, PER COIN, expectancy in R over the OOS
+period (2025->) under taker execution vs maker entry (an optimistic ceiling, with
+no no-fill model; that is R4). Isolates the effect of execution.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "BNB/USDT:USDT",
            "LINK/USDT:USDT", "LTC/USDT:USDT", "DOT/USDT:USDT", "TRX/USDT:USDT"]
 SPLIT = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
 
-# config fija "v2" (deja correr ganadores), informada por el WF
+# fixed "v2" config (let winners run), informed by the WF
 FIXED = {
     "ema_trend_stack": {"atr_mult_sl": 1.5, "tp_r": 4.0, "fresh_gate": True,
                         "session_filter": True, "rsi_filter": False},
@@ -66,14 +66,9 @@ def _worker(args):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-    L = ["# 🛠️ R2b — Ejecución (taker vs maker) + deja-correr-ganadores, por moneda",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · config FIJA por estrategia (tp_r=4) · "
-         f"sin selección por moneda · OOS = 2025→ · maker = techo optimista (sin no-fill)_\n"]
+    L = ["# R2b - Execution (taker vs maker) + let winners run, per coin",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | FIXED config per strategy (tp_r=4) | "
+         f"no per-coin selection | OOS = 2025-> | maker = optimistic ceiling (no no-fill model)_\n"]
 
     for strategy in ("ema_trend_stack", "momentum_pullback"):
         t0 = time.time()
@@ -82,31 +77,31 @@ def main():
             res = dict(pool.map(_worker, [(s, strategy) for s in SYMBOLS]))
         print(f"  [{time.time()-t0:.0f}s]", flush=True)
 
-        L.append(f"## {strategy}  (config fija: {FIXED[strategy]})")
-        L.append("| Moneda | full taker expR | OOS taker n/expR/WR | OOS **maker** expR | lift maker |")
+        L.append(f"## {strategy}  (fixed config: {FIXED[strategy]})")
+        L.append("| Coin | full taker expR | OOS taker n/expR/WR | OOS **maker** expR | maker lift |")
         L.append("|---|---:|---|---:|---:|")
         pos_tk = pos_mk = 0
         lifts = []
         for sym in SYMBOLS:
             r = res.get(sym)
             if r is None:
-                L.append(f"| {sym} | — | — | — | — |"); continue
+                L.append(f"| {sym} | - | - | - | - |"); continue
             to, mo, tf = r["taker_oos"], r["maker_oos"], r["taker_full"]
             lift = mo["exp_R"] - to["exp_R"]
             lifts.append(lift)
             pos_tk += to["exp_R"] > 0
             pos_mk += mo["exp_R"] > 0
-            flag = " ✅" if mo["exp_R"] > 0 and to["exp_R"] > 0 else (" 🟡" if mo["exp_R"] > 0 else "")
+            flag = " (both +)" if mo["exp_R"] > 0 and to["exp_R"] > 0 else (" (maker +)" if mo["exp_R"] > 0 else "")
             L.append(f"| {sym} | {tf['exp_R']:+.3f} | {to['n']}/{to['exp_R']:+.3f}/{to['wr']*100:.0f}% | "
                      f"{mo['exp_R']:+.3f}{flag} | {lift:+.3f} |")
-        L.append(f"\n_OOS positivas: taker={pos_tk}/12, maker={pos_mk}/12. "
-                 f"Lift maker medio (equiponderado)={np.mean(lifts):+.3f}R/trade._\n")
+        L.append(f"\n_Positive OOS: taker={pos_tk}/12, maker={pos_mk}/12. "
+                 f"Mean maker lift (equal-weighted)={np.mean(lifts):+.3f}R/trade._\n")
 
     md = "\n".join(L)
     out = DATA_DIR / "reports" / "r2b_exec_check.md"
     out.write_text(md, encoding="utf-8")
     print("\n" + md)
-    print(f"\n[guardado en {out}]", flush=True)
+    print(f"\n[saved to {out}]", flush=True)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,15 @@
-"""Fase B — cartera (HONESTA: robustez > sobreajuste).
+"""Phase B: portfolio (HONEST: robustness over overfitting).
 
-Hallazgo R-previo: tunear params por moneda en muestras chicas SOBREAJUSTA
-(train alto, OOS flojo) y los weights por edge in-sample también. Por eso B usa:
-  • params = BASELINE validado fijo (tp_r=4 etc.) — más robusto que el train-óptimo.
-  • B1 = DIAGNÓSTICO que demuestra el overfit del tuning (no se adopta).
-  • B6 = simulación de cartera (cuenta única) con baseline; compara equal vs edge
-    y límites de concurrencia/clúster; se elige el mejor por Sharpe OOS GENUINO.
+Earlier finding: tuning params per coin on small samples OVERFITS (high train,
+weak OOS), and so do in-sample edge weights. So phase B uses:
+  - params = the FIXED validated baseline (tp_r=4 etc.), more robust than the
+    train-optimal one.
+  - B1 = a DIAGNOSTIC that demonstrates the tuning overfit (not adopted).
+  - B6 = portfolio simulation (single account) with the baseline; compares equal
+    vs edge weights and concurrency/cluster limits; the best one by GENUINE OOS
+    Sharpe is chosen.
 
-Genera data/reports/phase_b.md + oscilion/strategies/tuned.py (weights+clusters+límites).
+Writes data/reports/phase_b.md + oscilion/strategies/tuned.py (weights + clusters + limits).
 """
 from __future__ import annotations
 
@@ -53,24 +55,19 @@ def sub(tr, lo, hi):
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
     series = {}
-    L = ["# 🎛️ Fase B — cartera (honesta: robustez > sobreajuste)",
-         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · params BASELINE fijo · métrica R · OOS=2025→_\n",
-         "## B1 (diagnóstico) — por qué NO tuneamos params por moneda",
-         "Tunear en train sobreajusta: el train-óptimo no generaliza. Mostramos baseline (tp_r=4) "
-         "vs train-óptimo, con su OOS genuino.\n",
-         "| Serie | baseline OOS n/expR | train-opt cfg | train-opt TRAIN→OOS |",
+    L = ["# Phase B - portfolio (honest: robustness over overfitting)",
+         f"_{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | FIXED baseline params | R metric | OOS=2025->_\n",
+         "## B1 (diagnostic) - why params are NOT tuned per coin",
+         "Tuning on train overfits: the train-optimal config does not generalize. Baseline "
+         "(tp_r=4) vs train-optimal, with its genuine OOS.\n",
+         "| Series | baseline OOS n/expR | train-opt cfg | train-opt TRAIN->OOS |",
          "|---|---|---|---|"]
     for sym, a in all_assignments():
         b = load_bundle(sym, a.strategy)
         base_tr = run(b, StratParams(strategy=a.strategy, params=a.params,
                                      max_hold_signal_bars=a.max_hold_signal_bars))
-        # train-óptimo (diagnóstico de overfit)
+        # train-optimal (overfit diagnostic)
         best, best_tr_exp = None, -9
         for cfg in _grid(a.strategy):
             tr = run(b, StratParams(strategy=a.strategy, params=cfg,
@@ -86,25 +83,25 @@ def main():
             cfg, tr = best
             cfgs = " ".join(f"{k}={cfg[k]}" for k in ("tp_r", "atr_mult_sl", "range_max_pct") if k in cfg)
             to = stats(sub(tr, 0, SPLIT))["exp_R"]; oo = stats(sub(tr, SPLIT, 1 << 62))["exp_R"]
-            L.append(f"| {sym.split('/')[0]}·{a.strategy[:3]} | {b_oos['n']}/{b_oos['exp_R']:+.3f} | "
-                     f"{cfgs} | {to:+.3f}→{oo:+.3f} |")
+            L.append(f"| {sym.split('/')[0]}-{a.strategy[:3]} | {b_oos['n']}/{b_oos['exp_R']:+.3f} | "
+                     f"{cfgs} | {to:+.3f}->{oo:+.3f} |")
 
     clusters = {k: CLUSTER[k.split("/")[0]] for k in series}
     trades_by = {k: v["trades"] for k, v in series.items()}
-    # weights: equal (robusto) vs edge por FULL exp_R (comparación)
+    # weights: equal (robust) vs edge by FULL exp_R (comparison)
     w_equal = {k: 1.0 for k in series}
     fe = {k: max(0.0, v["full"]["exp_R"]) for k, v in series.items()}
     mx = max(fe.values()) or 1.0
     w_edge = {k: round(max(0.3, e / mx), 3) for k, e in fe.items()}
 
     schemes = {
-        "equal sin límites":      (w_equal, 6, 6),
+        "equal no limits":        (w_equal, 6, 6),
         "equal maxc3 clu1":       (w_equal, 3, 1),
         "equal maxc3 clu2":       (w_equal, 3, 2),
         "edge  maxc3 clu2":       (w_edge, 3, 2),
     }
-    L += ["\n## B6 — simulación de CARTERA (cuenta única $10k, params baseline)",
-          "| Esquema | FULL ret/MaxDD/Sharpe | **OOS ret/MaxDD/Sharpe** | taken/skip |",
+    L += ["\n## B6 - PORTFOLIO simulation (single $10k account, baseline params)",
+          "| Scheme | FULL ret/MaxDD/Sharpe | **OOS ret/MaxDD/Sharpe** | taken/skip |",
           "|---|---|---|---|"]
     results = {}
     for name, (w, mc, mpc) in schemes.items():
@@ -116,22 +113,23 @@ def main():
                  f"**{oos.total_return*100:+.0f}%/{oos.max_drawdown*100:.0f}%/{oos.sharpe:.2f}** | "
                  f"{full.n_taken}/{full.n_skipped} |")
 
-    # elegir mejor por Sharpe OOS ENTRE los que tienen límites reales (control de
-    # concentración; "sin límites" queda solo como referencia, no se adopta).
+    # Pick the best by OOS Sharpe AMONG the schemes with real limits (concentration
+    # control; "no limits" is only a reference and is never adopted).
     limited = [n for n in results if results[n][3] <= 3]
     best_name = max(limited, key=lambda n: results[n][1].sharpe)
-    bfull, boos, bw, bmc, bmpc = results[best_name]
-    L.append(f"\n**Mejor esquema (Sharpe OOS): {best_name}** → OOS ret {boos.total_return*100:+.0f}%, "
+    _bfull, boos, bw, bmc, bmpc = results[best_name]
+    L.append(f"\n**Best scheme (OOS Sharpe): {best_name}** -> OOS ret {boos.total_return*100:+.0f}%, "
              f"MaxDD {boos.max_drawdown*100:.0f}%, Sharpe {boos.sharpe:.2f}.")
-    L.append("\n_Disciplina: params baseline fijos (tunear por moneda sobreajusta). "
-             "Clusters: majors={BTC,BNB,LINK,DOT} (~0.7), trx={TRX} (diversificador)._")
-    L.append("⚠️ _Las cifras de retorno son de backtest compuesto y se confirmarán en FORWARD (Fase A) "
-             "antes de creerlas; el número sobrio es el MaxDD. Sharpe es la brújula beneficio/riesgo._")
+    L.append("\n_Discipline: fixed baseline params (per-coin tuning overfits). "
+             "Clusters: majors={BTC,BNB,LINK,DOT} (~0.7), trx={TRX} (diversifier)._")
+    L.append("_Return figures come from a compounded backtest and must be confirmed in the "
+             "FORWARD test before being believed; the sober number is MaxDD. Sharpe is the "
+             "reward/risk compass._")
 
-    # escribir config afinada (baseline params + weights/clusters/límites elegidos)
-    tuned = ["# GENERADO por research/phase_b.py — no editar a mano.",
-             f"# {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC · mejor esquema: {best_name}",
-             "# params = baseline (tunear por moneda sobreajusta en muestras chicas).", ""]
+    # write the tuned config (baseline params + chosen weights/clusters/limits)
+    tuned = ["# GENERATED by research/phase_b.py - do not edit by hand.",
+             f"# {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC | best scheme: {best_name}",
+             "# params = baseline (per-coin tuning overfits on small samples).", ""]
     tuned.append("WEIGHTS = {")
     for k, w in bw.items():
         tuned.append(f"    {k!r}: {w},")
@@ -146,7 +144,7 @@ def main():
     md = "\n".join(L)
     (DATA_DIR / "reports" / "phase_b.md").write_text(md, encoding="utf-8")
     print("\n" + md)
-    print("\n[guardado: data/reports/phase_b.md + oscilion/strategies/tuned.py]")
+    print("\n[saved: data/reports/phase_b.md + oscilion/strategies/tuned.py]")
 
 
 if __name__ == "__main__":
