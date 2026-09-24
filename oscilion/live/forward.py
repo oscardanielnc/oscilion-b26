@@ -1,13 +1,13 @@
-"""Validación forward (Fase A) — el LOG conciso que responde keep/remove/fix/improve.
+"""Forward validation: the concise log that answers keep/remove/fix/improve.
 
-Corre el motor honesto (única fuente de verdad) para cada moneda×estrategia del
-portfolio, separa los trades en `backtest` (entrada < inception) y `forward`
-(entrada ≥ inception, datos NO vistos) y persiste un snapshot por (sym, strategy,
-scope) en `forward_results`. Comparar forward vs backtest dice si el edge sobrevive
-en la realidad. Conciso: solo n, winrate, exp_R, sum_R por serie.
+Runs the honest engine (single source of truth) for every coin x strategy in the
+portfolio, splits trades into `backtest` (entry < inception) and `forward`
+(entry >= inception, UNSEEN data) and persists a snapshot per (sym, strategy,
+scope) in `forward_results`. Comparing forward vs backtest tells whether the edge
+survives reality. Concise: only n, winrate, exp_R, sum_R per series.
 
-Pre-deploy el `inception` es un holdout reciente (auto-test del pipeline); al
-desplegar en la VM se fija a la fecha de despliegue y el forward se vuelve real.
+Before deploying, `inception` is a recent holdout (pipeline self-test); on the VM
+it is set to the deployment date and the forward becomes real.
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from oscilion.strategies import all_assignments, portfolio as P
 
 log = logging.getLogger(__name__)
 
-# Por debajo de esto, 0 trades NO significa "sin edge" sino "moneda oscura"
-# (histórico no sembrado): con ~3 años hay 26k velas 1h; <1000 = sin backfill.
+# Below this, 0 trades does NOT mean "no edge" but "dark coin" (history never
+# seeded): ~3 years is 26k 1h candles; < 1000 means no backfill.
 DARK_COIN_MIN_BARS = 1000
 
 
@@ -40,11 +40,11 @@ def _stats(trades: list[dict]) -> dict:
 
 
 def refresh(inception_ms: int | None = None) -> list[dict]:
-    """Recalcula y persiste el snapshot backtest/forward por sym×strategy."""
+    """Recompute and persist the backtest/forward snapshot per sym x strategy."""
     inception = inception_ms or config.forward_inception_ms
     db.init_db()
-    # régimen de mercado (benchmark) — se carga UNA vez y se reusa por combo (no-oro),
-    # para que forward_results refleje el filtro que aplica el monitor en vivo.
+    # Market regime (benchmark): loaded ONCE and reused per non-exempt combo, so
+    # forward_results reflects the filter the live monitor applies.
     reg_ts, reg_bull = np.array([]), np.array([], dtype=bool)
     if config.market_regime_filter:
         reg_ts, reg_bull = market_regime.regime_series(
@@ -61,23 +61,23 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
                 regime_close_ts=reg_ts if use_regime else np.array([]),
                 regime_bull=reg_bull if use_regime else np.array([], dtype=bool)))
         except Exception:
-            log.exception("forward refresh falló %s %s", sym, a.strategy)
+            log.exception("forward refresh failed %s %s", sym, a.strategy)
             continue
-        # 0 trades + histórico ínfimo = moneda oscura (sin backfill), NO "sin edge".
-        # Delatarlo aquí evita que un n=0 mudo pase por validación silenciosa.
+        # 0 trades + tiny history = dark coin (no backfill), NOT "no edge".
+        # Flagging it here keeps a silent n=0 from passing validation unnoticed.
         if not trades:
             bars = len(store.load_bars(sym, config.base_timeframe))
             if bars < DARK_COIN_MIN_BARS:
-                dark.append(f"{sym.split('/')[0]}|{a.strategy}({bars}velas)")
-        # backtest del gate = OOS [gate_from, inception): excluye la ventana donde se
-        # eligieron los params (pre-2025) para no inflar el exp_R que decide el capital.
+                dark.append(f"{sym.split('/')[0]}|{a.strategy}({bars} bars)")
+        # Gate backtest = OOS [gate_from, inception): excludes the window where the
+        # params were chosen (pre-2025) so the exp_R that decides capital is not inflated.
         gate_from = config.gate_backtest_from_ms
-        if gate_from >= inception:        # config inconsistente → no recortar
+        if gate_from >= inception:        # inconsistent config -> do not trim
             gate_from = 0
         bt = _stats([t for t in trades if gate_from <= t["entry_ts"] < inception])
         fw = _stats([t for t in trades if t["entry_ts"] >= inception])
-        # sub-ventanas OOS para el gate ROBUSTO: 2025 vs 2026-YTD (hasta inception).
-        # Que el gate exija edge en AMBOS regímenes, no solo en el promedio.
+        # OOS sub-windows for the ROBUST gate: 2025 vs 2026-YTD (up to inception),
+        # so the gate can check the recent window instead of only the average.
         split = config.gate_robust_split_ms
         oos_a = _stats([t for t in trades if gate_from <= t["entry_ts"] < min(split, inception)])
         oos_b = _stats([t for t in trades if split <= t["entry_ts"] < inception])
@@ -85,15 +85,15 @@ def refresh(inception_ms: int | None = None) -> list[dict]:
             db.upsert_forward_result(sym, a.strategy, scope, **s)
         out.append({"sym": sym, "strategy": a.strategy, "backtest": bt, "forward": fw})
     if dark:
-        log.warning("forward: %d serie(s) oscura(s) sin histórico: %s", len(dark), ", ".join(dark))
+        log.warning("forward: %d dark series without history: %s", len(dark), ", ".join(dark))
         db.log_event("WARN", "live.forward",
-                     f"{len(dark)} serie(s) sin histórico (backfill pendiente): {', '.join(dark)}")
-    db.log_event("INFO", "live.forward", f"forward refresh: {len(out)} series, {len(dark)} oscuras")
+                     f"{len(dark)} series without history (backfill pending): {', '.join(dark)}")
+    db.log_event("INFO", "live.forward", f"forward refresh: {len(out)} series, {len(dark)} dark")
     return out
 
 
 def curve() -> list[dict]:
-    """Lee el snapshot persistido (para API/frontend)."""
+    """Read the persisted snapshot (for the API/dashboard)."""
     with db._lock:
         rows = db.get_connection().execute(
             "SELECT sym, strategy, scope, n, win_rate, exp_r, sum_r, last_entry_ts, updated_at"
@@ -103,45 +103,40 @@ def curve() -> list[dict]:
 
 
 def main() -> None:
-    """CLI: muestra backtest vs forward por moneda×estrategia.
+    """CLI: show backtest vs forward per coin x strategy.
 
-    Por defecto LEE la tabla persistida (la que puebla el servicio con la inception
-    real de despliegue → coincide con el dashboard). Con --recompute recalcula al
-    vuelo (usa la inception de config; útil offline)."""
+    By default it READS the persisted table (filled by the service with the real
+    deployment inception, so it matches the dashboard). --recompute recomputes on
+    the fly (uses the config inception; useful offline)."""
     import sys
     from oscilion.logging_setup import setup_logging
 
     setup_logging()
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
 
     recompute = "--recompute" in sys.argv
     if recompute:
         refresh()
     rows = curve()
-    if not rows:                                  # aún sin snapshot del servicio
+    if not rows:                                  # no service snapshot yet
         refresh()
         rows = curve()
 
-    # reshape: (sym,strategy) -> {backtest, forward}
     by: dict[tuple, dict] = {}
     for r in rows:
         by.setdefault((r["sym"], r["strategy"]), {})[r["scope"]] = r
 
-    print(f"\n{'MONEDA':<7}{'ESTRATEGIA':<18}{'BACKTEST (n/expR)':<22}{'FORWARD (n/expR)':<22}VEREDICTO")
+    print(f"\n{'COIN':<7}{'STRATEGY':<18}{'BACKTEST (n/expR)':<22}{'FORWARD (n/expR)':<22}VERDICT")
     print("-" * 80)
     for (sym, strat), d in sorted(by.items()):
         bt, fw = d.get("backtest", {}), d.get("forward", {})
-        be = f"{bt.get('n',0)}/{bt['exp_r']:+.3f}" if bt.get("exp_r") is not None else f"{bt.get('n',0)}/—"
-        fe = f"{fw.get('n',0)}/{fw['exp_r']:+.3f}" if fw.get("exp_r") is not None else f"{fw.get('n',0)}/—"
+        be = f"{bt.get('n',0)}/{bt['exp_r']:+.3f}" if bt.get("exp_r") is not None else f"{bt.get('n',0)}/-"
+        fe = f"{fw.get('n',0)}/{fw['exp_r']:+.3f}" if fw.get("exp_r") is not None else f"{fw.get('n',0)}/-"
         if fw.get("exp_r") is None or fw.get("n", 0) < 10:
-            v = "⏳ acumulando forward"
+            v = "accumulating forward"
         elif fw["exp_r"] > 0:
-            v = "✅ aguanta"
+            v = "holds"
         else:
-            v = "⚠️ revisar"
+            v = "review"
         print(f"{sym.split('/')[0]:<7}{strat:<18}{be:<22}{fe:<22}{v}")
 
 

@@ -1,5 +1,5 @@
-"""Capa en vivo de Oscilion: monitor dry-run + validación forward.
+"""Oscilion live layer: dry-run monitor + forward validation.
 
-Reusa la MISMA lógica de señal/motor que el backtest (única fuente de verdad),
-para que lo que se valida sea exactamente lo que opera.
+Reuses the SAME signal/engine logic as the backtest (single source of truth), so
+what gets validated is exactly what trades.
 """

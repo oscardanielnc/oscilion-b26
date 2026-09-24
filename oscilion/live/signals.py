@@ -1,11 +1,11 @@
-"""Señales en vivo curadas (para el frontend) — solo lo que aporta valor.
+"""Curated live signals for the dashboard: only what adds value.
 
-Por cada moneda×estrategia devuelve: precio, dirección según SU estrategia,
-SL/TP propuestos, RR, niveles relevantes (EMAs para trend; rango para breakout),
-RSI solo si la estrategia lo usa, y un checklist de condiciones (por qué dispara
-o qué falta). Estado: EN TRADE / SEÑAL ACTIVA / ESPERANDO.
+For each coin x strategy it returns: price, direction according to ITS strategy,
+proposed SL/TP, RR, relevant levels (EMAs for trend; range for breakout), RSI
+only if the strategy uses it, and a checklist of conditions (why it fires or what
+is missing). State: IN TRADE / SIGNAL ACTIVE / WAITING.
 
-Sin indicadores de relleno. Lee del store (lo refresca el monitor cada tick).
+No filler indicators. Reads from the store (refreshed by the monitor every tick).
 """
 from __future__ import annotations
 
@@ -40,10 +40,10 @@ def _ema_view(ctx, i, a, price, atr) -> dict:
     tp = price + a.params.get("tp_r", 4.0) * risk
     checklist = [
         {"label": "Stack 9>21>50 (4H)", "ok": bool(e9 > e21 > e50)},
-        {"label": "Precio > EMA50", "ok": bool(price > e50)},
-        {"label": "Pullback a EMA21", "ok": bool(recent_low <= e21 * (1 + margin) and price > e21)},
-        {"label": "1H aún no alcista (frescura)", "ok": bool(fresh_ok)},
-        {"label": "Sesión EU/NY", "ok": bool(session_ok)},
+        {"label": "Price > EMA50", "ok": bool(price > e50)},
+        {"label": "Pullback to EMA21", "ok": bool(recent_low <= e21 * (1 + margin) and price > e21)},
+        {"label": "1H not yet bullish (freshness)", "ok": bool(fresh_ok)},
+        {"label": "EU/NY session", "ok": bool(session_ok)},
     ]
     return {
         "direction": "long", "bias": "long",
@@ -52,7 +52,7 @@ def _ema_view(ctx, i, a, price, atr) -> dict:
         "tp_pct": round((tp - price) / price * 100, 2) if price else None,
         "rr": a.params.get("tp_r", 4.0),
         "levels": {"EMA9": round(e9, 6), "EMA21": round(e21, 6), "EMA50": round(e50, 6)},
-        "indicators": {"RSI": round(rsi, 1), "RSI_sano": bool(40 <= rsi <= 65)},
+        "indicators": {"RSI": round(rsi, 1), "RSI_healthy": bool(40 <= rsi <= 65)},
         "checklist": checklist,
     }
 
@@ -69,12 +69,12 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
     session_ok = 8 <= (T // _H) % 24 < 21
     narrow_ok = width_pct is not None and width_pct <= a.params.get("range_max_pct", 0.015) * 100
     if price > hi:
-        direction = bias = "long"            # ruptura real ↑
+        direction = bias = "long"            # real breakout up
     elif price < lo:
-        direction = bias = "short"           # ruptura real ↓
+        direction = bias = "short"           # real breakout down
     else:
-        # dentro del rango: NO hay ruptura → no hay dirección comprometida.
-        # `bias` es solo el borde más cercano (sesgo visual), no una señal.
+        # Inside the range: NO breakout -> no committed direction.
+        # `bias` is only the nearest edge (a visual hint), not a signal.
         direction = "neutral"
         bias = "long" if (hi - price) <= (price - lo) else "short"
     if bias == "long":
@@ -88,10 +88,10 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
         tp = price - a.params.get("tp_r", 4.0) * risk
         ema_ok = ema50_4h is not None and price < ema50_4h
     checklist = [
-        {"label": f"Rompe rango {rng}h", "ok": bool(price > hi or price < lo)},
-        {"label": "Rango estrecho (<1.5%)", "ok": bool(narrow_ok)},
-        {"label": "EMA50 4H alineado", "ok": bool(ema_ok)},
-        {"label": "Sesión EU/NY", "ok": bool(session_ok)},
+        {"label": f"Breaks {rng}h range", "ok": bool(price > hi or price < lo)},
+        {"label": "Narrow range (<1.5%)", "ok": bool(narrow_ok)},
+        {"label": "4H EMA50 aligned", "ok": bool(ema_ok)},
+        {"label": "EU/NY session", "ok": bool(session_ok)},
     ]
     return {
         "direction": direction, "bias": bias,
@@ -99,16 +99,16 @@ def _orb_view(ctx, i, a, price, atr) -> dict:
         "stop_pct": round(abs(price - stop) / price * 100, 2) if price else None,
         "tp_pct": round(abs(tp - price) / price * 100, 2) if price else None,
         "rr": a.params.get("tp_r", 4.0),
-        "levels": {"Rango_sup": round(hi, 6), "Rango_inf": round(lo, 6),
+        "levels": {"Range_hi": round(hi, 6), "Range_lo": round(lo, 6),
                    "EMA50_4H": round(ema50_4h, 6) if ema50_4h else None,
-                   "ancho_%": round(width_pct, 2) if width_pct else None},
-        "indicators": {},                          # ORB no usa RSI: no se muestra
+                   "width_%": round(width_pct, 2) if width_pct else None},
+        "indicators": {},                          # ORB does not use RSI: not shown
         "checklist": checklist,
     }
 
 
 def _vwap_view(ctx, i, a, price, atr) -> dict:
-    """Vista de vwap_anchor: VWAP 1h/4h, frescura, SL/TP y checklist real (C1/C2/O1)."""
+    """vwap_anchor view: 1h/4h VWAP, freshness, SL/TP and the real checklist (C1/C2/O1)."""
     s = ctx.sig
     vwap1 = float(s.vwap[i]) if np.isfinite(s.vwap[i]) else None
     T = int(s.ts[i]) + ctx.sig_tf_h * _H
@@ -124,17 +124,17 @@ def _vwap_view(ctx, i, a, price, atr) -> dict:
     tp_r = a.params.get("tp_r", 2.5)
     tp = price + tp_r * risk if tp_r else price
     checklist = [
-        {"label": "Precio > VWAP 1h", "ok": bool(c1)},
-        {"label": "Precio > VWAP 4h", "ok": bool(c2)},
-        {"label": "Frescura (EMA9<EMA21 1h)", "ok": bool(fresh_ok)},
+        {"label": "Price > 1h VWAP", "ok": bool(c1)},
+        {"label": "Price > 4h VWAP", "ok": bool(c2)},
+        {"label": "Freshness (1h EMA9<EMA21)", "ok": bool(fresh_ok)},
     ]
     return {
         "direction": direction, "bias": "long",
         "entry": round(price, 6), "stop": round(stop, 6),
-        "tp": round(tp, 6) if tp_r else "sin TP",
+        "tp": round(tp, 6) if tp_r else "no TP",
         "stop_pct": round(risk / price * 100, 2) if price else None,
         "tp_pct": round((tp - price) / price * 100, 2) if (price and tp_r) else None,
-        "rr": tp_r if tp_r else "sin TP",
+        "rr": tp_r if tp_r else "no TP",
         "levels": {"VWAP_1h": round(vwap1, 6) if vwap1 else None,
                    "VWAP_4h": round(vwap4, 6) if vwap4 else None,
                    "EMA50_4h": round(ema50_4h, 6) if ema50_4h else None},
@@ -144,8 +144,8 @@ def _vwap_view(ctx, i, a, price, atr) -> dict:
 
 
 def _generic_view(a, price, cand) -> dict:
-    """Vista honesta para estrategias sin vista dedicada (p.ej. break_retest en
-    forward-test): refleja el candidato REAL si existe, sin inventar niveles ajenos."""
+    """Honest view for strategies without a dedicated one (e.g. break_retest):
+    reflects the REAL candidate if there is one, without inventing levels."""
     rr = a.params.get("tp_r", 0.0)
     if cand:
         side = cand["side"]
@@ -158,16 +158,16 @@ def _generic_view(a, price, cand) -> dict:
             "tp": round(tp, 6) if tp is not None else "runner",
             "stop_pct": round(risk / price * 100, 2) if price else None,
             "tp_pct": round(abs(tp - price) / price * 100, 2) if (price and rr and tp is not None) else None,
-            "rr": rr if rr else "sin TP",
+            "rr": rr if rr else "no TP",
             "levels": {}, "indicators": {},
-            "checklist": [{"label": "Ruptura silenciosa + retest confirmado", "ok": True}],
+            "checklist": [{"label": "Stealth breakout + retest confirmed", "ok": True}],
         }
     return {
         "direction": "neutral", "bias": "long",
         "entry": round(price, 6), "stop": round(price, 6), "tp": round(price, 6),
-        "stop_pct": None, "tp_pct": None, "rr": rr if rr else "sin TP",
+        "stop_pct": None, "tp_pct": None, "rr": rr if rr else "no TP",
         "levels": {}, "indicators": {},
-        "checklist": [{"label": "Esperando ruptura silenciosa + retest", "ok": False}],
+        "checklist": [{"label": "Waiting for stealth breakout + retest", "ok": False}],
     }
 
 
@@ -191,17 +191,17 @@ def live_signals() -> list[dict]:
         elif a.strategy == "vwap_anchor":
             view = _vwap_view(ctx, i, a, price, atr)
         else:
-            view = _generic_view(a, price, cand)        # break_retest u otras en forward-test
+            view = _generic_view(a, price, cand)        # break_retest and others
         st = states.get(f"{sym}|{a.strategy}", {})
         pos = st.get("position")
         n_ok = sum(1 for c in view["checklist"] if c["ok"])
-        state = "EN TRADE" if pos else ("SEÑAL ACTIVA" if cand else "ESPERANDO")
-        # horizonte máximo del trade (timeout) = max_hold × TF de señal
+        state = "IN TRADE" if pos else ("SIGNAL ACTIVE" if cand else "WAITING")
+        # max trade horizon (timeout) = max_hold x signal TF
         horizon_h = a.max_hold_signal_bars * ctx.sig_tf_h
         if horizon_h >= 48:
-            horizon = f"swing · hasta ~{horizon_h // 24} días"
+            horizon = f"swing, up to ~{horizon_h // 24} days"
         else:
-            horizon = f"corto · hasta ~{horizon_h} h"
+            horizon = f"short, up to ~{horizon_h} h"
         out.append({
             "sym": sym, "base": sym.split("/")[0], "strategy": a.strategy,
             "conviction": a.conviction, "observe_only": a.observe_only,

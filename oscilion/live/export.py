@@ -1,11 +1,11 @@
-"""Exportación de logs para revisión diaria (Fase A).
+"""Log export for the daily review.
 
-Genera un reporte CONCISO (markdown o json) de un rango de días, con todo lo que
-sirve para decidir keep/remove/fix/improve: info del sistema, validación forward
-(backtest vs vivo), trades del rango (+ resumen por estrategia para validar
-targets), alertas y errores. Pensado para compartir sin saturar.
+Builds a CONCISE report (markdown or json) for a range of days with everything
+needed to decide keep/remove/fix/improve: system info, forward validation
+(backtest vs live), trades in the range (+ a per-strategy summary to check
+targets), alerts and errors. Meant to be shared without overwhelming.
 
-Rango interpretado en hora de Lima (UTC-5, sin DST).
+Dates are interpreted in the report timezone (UTC-5, no DST).
 """
 from __future__ import annotations
 
@@ -18,18 +18,18 @@ from oscilion.persistence import db
 from oscilion.strategies import all_assignments
 from oscilion.strategies import portfolio as P
 
-LIMA = timezone(timedelta(hours=-5))
+REPORT_TZ = timezone(timedelta(hours=-5))
 
 
 def range_ms(date_from: str, date_to: str) -> tuple[int, int]:
-    """'YYYY-MM-DD'..'YYYY-MM-DD' (días Lima, inclusivos) → (from_ms, to_ms)."""
-    d0 = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=LIMA)
-    d1 = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=LIMA) + timedelta(days=1)
+    """'YYYY-MM-DD'..'YYYY-MM-DD' (report-TZ days, inclusive) -> (from_ms, to_ms)."""
+    d0 = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=REPORT_TZ)
+    d1 = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=REPORT_TZ) + timedelta(days=1)
     return int(d0.timestamp() * 1000), int(d1.timestamp() * 1000)
 
 
-def _lima(ms: int) -> str:
-    return datetime.fromtimestamp(ms / 1000, tz=LIMA).strftime("%Y-%m-%d %H:%M")
+def _local(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000, tz=REPORT_TZ).strftime("%Y-%m-%d %H:%M")
 
 
 def collect(from_ms: int, to_ms: int) -> dict:
@@ -60,7 +60,7 @@ def collect(from_ms: int, to_ms: int) -> dict:
             " (SELECT MAX(id) FROM series_snapshots WHERE ts>=? AND ts<? GROUP BY sym, strategy)",
             (from_ms, to_ms))}
         for s in snaps:
-            s["latest_state"] = latest.get(f"{s['sym']}|{s['strategy']}", "—")
+            s["latest_state"] = latest.get(f"{s['sym']}|{s['strategy']}", "-")
         counts = db.counts()
     return {"trades": trades, "alerts": alerts, "errors": errors,
             "decisions": decisions, "forward": fwd, "snapshots": snaps, "counts": counts}
@@ -83,19 +83,19 @@ def _trade_summary(trades: list[dict]) -> list[dict]:
 def build_markdown(date_from: str, date_to: str) -> str:
     from_ms, to_ms = range_ms(date_from, date_to)
     d = collect(from_ms, to_ms)
-    L = [f"# Oscilion — logs {date_from} → {date_to} (hora Lima)",
-         f"_Generado {_lima(int(datetime.now(LIMA).timestamp()*1000))} · v{__version__} · modo {config.mode.value}_\n",
-         "## Sistema",
-         f"- Núcleo: {len(all_assignments())} series · límites maxc {P.MAX_CONCURRENT}/clúster {P.MAX_PER_CLUSTER} · tuned={P._TUNED}",
-         f"- DB filas: " + ", ".join(f"{k}={v}" for k, v in d['counts'].items() if k in ('trades', 'predictions', 'decisions', 'events', 'forward_results', 'series_snapshots')),
+    L = [f"# Oscilion - logs {date_from} -> {date_to} (UTC-5)",
+         f"_Generated {_local(int(datetime.now(REPORT_TZ).timestamp()*1000))} | v{__version__} | mode {config.mode.value}_\n",
+         "## System",
+         f"- Core: {len(all_assignments())} series | limits maxc {P.MAX_CONCURRENT}/cluster {P.MAX_PER_CLUSTER} | tuned={P._TUNED}",
+         "- DB rows: " + ", ".join(f"{k}={v}" for k, v in d['counts'].items() if k in ('trades', 'predictions', 'decisions', 'events', 'forward_results', 'series_snapshots')),
          ""]
 
-    L.append("## Validación forward (backtest vs vivo) — acumulado")
-    L.append("| Moneda | Estrategia | scope | n | winrate | exp_R |")
+    L.append("## Forward validation (backtest vs live), cumulative")
+    L.append("| Coin | Strategy | scope | n | winrate | exp_R |")
     L.append("|---|---|---|--:|--:|--:|")
     for r in d["forward"]:
-        wr = f"{r['win_rate']*100:.0f}%" if r["win_rate"] is not None else "—"
-        er = f"{r['exp_r']:+.3f}" if r["exp_r"] is not None else "—"
+        wr = f"{r['win_rate']*100:.0f}%" if r["win_rate"] is not None else "-"
+        er = f"{r['exp_r']:+.3f}" if r["exp_r"] is not None else "-"
         L.append(f"| {r['sym'].split('/')[0]} | {r['strategy']} | {r['scope']} | {r['n']} | {wr} | {er} |")
 
     capital = [t for t in d["trades"] if not t.get("observe")]
@@ -107,61 +107,61 @@ def build_markdown(date_from: str, date_to: str) -> str:
         except Exception:
             a = None
         if not a:
-            return "—"
-        return (f"px {a['r_gross']:+.2f} · slip {a['r_slip_exit']:+.3f} · "
-                f"fees {a['r_fee_entry'] + a['r_fee_exit']:+.3f} · fund {a['r_funding']:+.3f}")
+            return "-"
+        return (f"px {a['r_gross']:+.2f} | slip {a['r_slip_exit']:+.3f} | "
+                f"fees {a['r_fee_entry'] + a['r_fee_exit']:+.3f} | fund {a['r_funding']:+.3f}")
 
-    def _tabla(rows: list[dict]) -> None:
-        L.append("| Cierre (Lima) | Moneda | Estrategia | Lado | R | PnL | Salida | Coste (R: px/slip/fees/fund) |")
+    def _table(rows: list[dict]) -> None:
+        L.append("| Close (UTC-5) | Coin | Strategy | Side | R | PnL | Exit | Cost (R: px/slip/fees/fund) |")
         L.append("|---|---|---|---|--:|--:|---|---|")
         for t in rows:
-            L.append(f"| {_lima(t['exit_ts'])} | {t['sym'].split('/')[0]} | {t['strategy']} | "
+            L.append(f"| {_local(t['exit_ts'])} | {t['sym'].split('/')[0]} | {t['strategy']} | "
                      f"{t['side']} | {t['r_multiple']:+.2f} | {t['pnl']:+.2f} | "
-                     f"{t.get('exit_reason') or '—'} | {_audit_txt(t)} |")
+                     f"{t.get('exit_reason') or '-'} | {_audit_txt(t)} |")
 
-    L.append(f"\n## Trades cerrados CON capital ({len(capital)})")
+    L.append(f"\n## Closed trades WITH capital ({len(capital)})")
     if capital:
-        _tabla(capital)
-        L.append("\n**Resumen por estrategia (para validar targets):**")
-        L.append("| Estrategia | n | winrate | R medio |")
+        _table(capital)
+        L.append("\n**Per-strategy summary (to check targets):**")
+        L.append("| Strategy | n | winrate | mean R |")
         L.append("|---|--:|--:|--:|")
         for s in _trade_summary(capital):
             L.append(f"| {s['strategy']} | {s['n']} | {s['winrate']*100:.0f}% | {s['avg_R']:+.3f} |")
     else:
-        L.append("_Sin trades con capital en el rango._")
+        L.append("_No capital trades in the range._")
 
-    L.append(f"\n## Forward-test SIN capital — observe ({len(observe)})")
-    L.append("_No cuentan en el PnL: combos sin validación local suficiente (gate) o en observación._")
+    L.append(f"\n## Forward test WITHOUT capital, observe ({len(observe)})")
+    L.append("_Excluded from PnL: combos without enough local validation (gate) or under observation._")
     if observe:
-        _tabla(observe)
+        _table(observe)
     else:
-        L.append("_Sin trades observe en el rango._")
+        L.append("_No observe trades in the range._")
 
-    L.append(f"\n## Actividad del observador (snapshots del rango)")
+    L.append("\n## Observer activity (snapshots in the range)")
     if d["snapshots"]:
-        L.append("| Moneda | Estrategia | ciclos | últ. estado | mejor checklist | señal activa | en trade |")
+        L.append("| Coin | Strategy | cycles | last state | best checklist | signal active | in trade |")
         L.append("|---|---|--:|---|--:|--:|--:|")
         for s in d["snapshots"]:
-            chk = f"{s['best_ok']}/{s['tot']}" if s["tot"] is not None else "—"
+            chk = f"{s['best_ok']}/{s['tot']}" if s["tot"] is not None else "-"
             L.append(f"| {s['sym'].split('/')[0]} | {s['strategy']} | {s['n']} | {s['latest_state']} | "
                      f"{chk} | {s['n_active'] or 0} | {s['n_in_trade'] or 0} |")
     else:
-        L.append("_Sin snapshots en el rango (el monitor aún no los ha generado)._")
+        L.append("_No snapshots in the range (the monitor has not produced any yet)._")
 
-    L.append(f"\n## Alertas en el rango ({len(d['alerts'])})")
+    L.append(f"\n## Alerts in the range ({len(d['alerts'])})")
     for a in d["alerts"]:
-        L.append(f"- {_lima(a['ts'])} · {a['msg']}")
+        L.append(f"- {_local(a['ts'])} | {a['msg']}")
     if not d["alerts"]:
-        L.append("_Sin alertas._")
+        L.append("_No alerts._")
 
-    L.append(f"\n## Errores/avisos ({len(d['errors'])})")
+    L.append(f"\n## Errors/warnings ({len(d['errors'])})")
     for e in d["errors"]:
-        L.append(f"- {_lima(e['ts'])} · {e['level']} · {e['module']} · {e['msg']}")
+        L.append(f"- {_local(e['ts'])} | {e['level']} | {e['module']} | {e['msg']}")
     if not d["errors"]:
-        L.append("_Sin errores ni avisos._")
+        L.append("_No errors or warnings._")
 
     if d["decisions"]:
-        L.append("\n## Decisiones (conteo): " + ", ".join(f"{x['action']}={x['n']}" for x in d["decisions"]))
+        L.append("\n## Decisions (count): " + ", ".join(f"{x['action']}={x['n']}" for x in d["decisions"]))
     return "\n".join(L)
 
 

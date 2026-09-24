@@ -16,7 +16,7 @@ def test_gate_observe_only_siempre_sin_capital():
 
 def test_gate_sin_backtest_local_bloquea():
     obs, reason = guards.gate_decision(None, False, min_n=30, min_exp_r=0.0)
-    assert obs and "sin backtest" in reason
+    assert obs and "no local backtest" in reason
 
 
 def test_gate_n_chico_bloquea():
@@ -79,7 +79,7 @@ def test_gate_robusto_corta_edge_que_decae():
     obs, reason = guards.gate_decision(_BT_OK, False,
                                        sub_windows=[{"n": 30, "exp_r": 0.5},
                                                     {"n": 25, "exp_r": -0.2}], **_RW)
-    assert obs and "OOS reciente" in reason
+    assert obs and "recent OOS" in reason
 
 
 def test_gate_robusto_permite_alpha_emergente():
