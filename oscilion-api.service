@@ -1,5 +1,5 @@
 [Unit]
-Description=Oscilion — API / dashboard (FastAPI)
+Description=Oscilion - API / dashboard (FastAPI)
 After=network-online.target
 Wants=network-online.target
 

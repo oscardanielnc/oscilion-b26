@@ -1,5 +1,5 @@
 [Unit]
-Description=Oscilion — orquestador (cerebro de señales)
+Description=Oscilion - orchestrator (signal engine)
 After=network-online.target
 Wants=network-online.target
 
@@ -12,7 +12,7 @@ EnvironmentFile=/etc/oscilion.env
 ExecStart=/opt/oscilion/.venv/bin/python -m oscilion
 Restart=always
 RestartSec=30
-# Reinicio resiliente: si falla en bucle, espera y sigue intentando.
+# Resilient restart: if it crash-loops, keep waiting and retrying.
 StartLimitIntervalSec=0
 StandardOutput=journal
 StandardError=journal
